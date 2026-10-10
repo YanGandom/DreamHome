@@ -7,8 +7,9 @@ import {createBuildingControls} from './building-controls.js';
 const CATEGORIES={seating:'座椅',tables:'桌柜',lighting:'灯具',plants:'植物',rugs:'地毯',decor:'陈设',mounted:'墙饰',walls:'墙体'};
 const STORAGE_KEY='winter-grand-layout-v1';
 export function createSceneEditor({scene,camera,renderer,controls,furnitureSystem:system,occluders=[],onInteract=()=>{},onResize=()=>{},onBuildingView=()=>{},toast=()=>{},thumbnailFactory=createModelThumbnails}){
-  const $=id=>document.getElementById(id),ui={list:$('library-list'),status:$('save-status')};
+  const $=id=>document.getElementById(id),ui={list:$('library-list'),status:$('save-status'),panel:$('editor-panel'),collapse:$('library-collapse-toggle')};
   let selectedId=null,selectedFloorId=null,editing=true,tab='catalog',category='all',buildCategory='all',operation=null,libraryDrag=null,suppressClick=false,builder=null;
+  let libraryCollapsed=false;
   const thumbnails=thumbnailFactory(renderer),dragMarker=createGroundSelection(scene,'LibraryPlacement'),raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
   try{const saved=localStorage.getItem(STORAGE_KEY);if(saved){if(system.loadSaved(JSON.parse(saved)))ui.status.textContent='已恢复上次布局 · 本机';else ui.status.textContent='已使用初始布局'}}catch{ui.status.textContent='本次可编辑 · 本地保存不可用'}
   function save(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(system.serialize()));ui.status.textContent='已自动保存 · 本机'}catch{ui.status.textContent='无法自动保存 · 请勿刷新'}}
@@ -20,6 +21,14 @@ export function createSceneEditor({scene,camera,renderer,controls,furnitureSyste
   }
   function setEditing(value){editing=value;interaction.setEnabled(value);builder?.setEnabled(value&&tab==='build');const button=$('edit-mode');button.classList.toggle('active',value);button.setAttribute('aria-pressed',String(value));button.textContent=value?'编辑':'浏览';$('scene-hint').textContent=value?'轻点布置 · 拖动环绕 · 双指缩放':'拖动环绕 · 双指缩放'}
   function select(id){if(id&&!editing)setEditing(true);return interaction.select(id)}
+  function setLibraryCollapsed(value){
+    if(interaction.dragging||builder?.dragging)return false;
+    finishLibraryDrag(false);libraryCollapsed=!!value;
+    ui.panel.hidden=libraryCollapsed;document.body.classList.toggle('library-collapsed',libraryCollapsed);
+    ui.collapse.setAttribute('aria-expanded',String(!libraryCollapsed));ui.collapse.setAttribute('aria-label',libraryCollapsed?'展开组件库':'收起组件库');ui.collapse.title=libraryCollapsed?'展开组件库':'收起组件库';
+    // Resize immediately from the new CSS height; keep filters, scroll and the current edit.
+    onResize();interaction.update();builder?.update();return true;
+  }
   function setTab(value){finishLibraryDrag(false);builder?.close();interaction.close();tab=value;if(tab==='build'&&!editing)setEditing(true);builder?.setEnabled(editing&&tab==='build');for(const button of document.querySelectorAll('[data-library-tab]')){button.classList.toggle('active',button.dataset.libraryTab===tab);button.setAttribute('aria-selected',String(button.dataset.libraryTab===tab))}$('library-categories').hidden=tab==='build';$('build-categories').hidden=tab!=='build';ui.list.scrollLeft=0;renderLibrary()}
   function resetFilters(){category='all';for(const button of document.querySelectorAll('[data-category]'))button.classList.toggle('active',button.dataset.category==='all')}
   function remove(id){const r=system.get(id);if(!r||r.kind==='wall')return;system.remove(id);resetFilters();setTab('removed');toast(r.name+'已收纳，可在组件库恢复')}
@@ -92,11 +101,12 @@ export function createSceneEditor({scene,camera,renderer,controls,furnitureSyste
   window.addEventListener('keydown',event=>{if(!libraryDrag)return;if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();finishLibraryDrag(false)}else if((event.ctrlKey||event.metaKey)&&['z','y'].includes(event.key.toLowerCase()))finishLibraryDrag(false)},{capture:true});
   $('undo-edit').addEventListener('click',()=>{builder?.close(false);interaction.close(false);system.undo()});$('redo-edit').addEventListener('click',()=>{builder?.close(false);interaction.close(false);system.redo()});
   $('edit-mode').addEventListener('click',()=>setEditing(!editing));
+  ui.collapse.addEventListener('click',()=>setLibraryCollapsed(!libraryCollapsed));
   for(const button of document.querySelectorAll('[data-library-tab]'))button.addEventListener('click',()=>setTab(button.dataset.libraryTab));
   for(const button of document.querySelectorAll('[data-category]'))button.addEventListener('click',()=>{category=button.dataset.category;for(const b of document.querySelectorAll('[data-category]'))b.classList.toggle('active',b===button);renderLibrary()});
   for(const button of document.querySelectorAll('[data-build-category]'))button.addEventListener('click',()=>{buildCategory=button.dataset.buildCategory;for(const b of document.querySelectorAll('[data-build-category]'))b.classList.toggle('active',b===button);ui.list.scrollLeft=0;renderLibrary()});
   ui.list.addEventListener('wheel',event=>{if(Math.abs(event.deltaY)>Math.abs(event.deltaX)){ui.list.scrollLeft+=event.deltaY;event.preventDefault()}},{passive:false});
   system.subscribe(type=>{renderInspector();if(type!=='preview')renderLibrary();if(type==='commit')save()});
   renderInspector();renderLibrary();
-  return{select,pick:interaction.pick,pickFloor:interaction.pickFloor,beginMode:interaction.beginMode,close:interaction.close,setEditing,setTab,builder,update:()=>{interaction.update();builder?.update();if(!libraryDrag&&!builder?.dragging)thumbnails.update()},get selectedId(){return selectedId},get selectedFloorId(){return interaction.selectedFloorId},get mode(){return interaction.mode},get editing(){return editing},get dragging(){return!!libraryDrag?.moved||interaction.dragging||!!builder?.dragging},storageKey:STORAGE_KEY};
+  return{select,pick:interaction.pick,pickFloor:interaction.pickFloor,beginMode:interaction.beginMode,close:interaction.close,setEditing,setTab,setLibraryCollapsed,builder,update:()=>{interaction.update();builder?.update();if(!libraryCollapsed&&!libraryDrag&&!builder?.dragging)thumbnails.update()},get libraryCollapsed(){return libraryCollapsed},get selectedId(){return selectedId},get selectedFloorId(){return interaction.selectedFloorId},get mode(){return interaction.mode},get editing(){return editing},get dragging(){return!!libraryDrag?.moved||interaction.dragging||!!builder?.dragging},storageKey:STORAGE_KEY};
 }

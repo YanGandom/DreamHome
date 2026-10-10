@@ -53,7 +53,8 @@ const canvas=new Element('canvas');renderer.domElement=canvas;
 const controls=new OrbitControls(camera,canvas);controls.enableDamping=false;
 const world=scene.getObjectByName('Architecture');assert.ok(world);
 const thumbnailFactory=()=>({request:(record,image)=>{image.src='mock-model:'+record.sourceId+':'+record.color},update:()=>{},clearPending:()=>{}});
-const editor=createSceneEditor({scene,camera,renderer,controls,furnitureSystem:system,occluders:world.children,thumbnailFactory});
+let resizeCalls=0;
+const editor=createSceneEditor({scene,camera,renderer,controls,furnitureSystem:system,occluders:world.children,thumbnailFactory,onResize:()=>resizeCalls++});
 const $=id=>elements.get(id),tabButton=tab=>libraryTabs.find(b=>b.dataset.libraryTab===tab);
 $('rotation-arc').rect={left:100,top:100,width:ROTATION_ARC.width,height:ROTATION_ARC.height};
 function overhead(){camera.position.set(.1,27,2.4);controls.target.set(0,0,1);controls.update();camera.updateMatrixWorld(true);scene.updateMatrixWorld(true)}
@@ -103,6 +104,22 @@ test('360 endpoint remains labelled 360, and keyboard arc changes are accessible
 test('clicking the arc label does not jump the rotation, and pointer cancel rolls back the slider',()=>{
   editor.select(sofa.id);$('object-rotate').click();const before=sofa.root.rotation.y,arc=$('rotation-arc');arc.emit('pointerdown',{clientX:280,clientY:188});assert.equal(editor.dragging,false);assert.equal(sofa.root.rotation.y,before);
   arc.emit('pointerdown',arcEvent(0));arc.emit('pointermove',arcEvent(60));arc.emit('pointercancel',arcEvent(60));assert.equal(sofa.root.rotation.y,before);editor.close(false);
+});
+test('mobile thumb padding grabs without jumping, supports endpoints and cancels cleanly',()=>{
+  editor.select(sofa.id);$('object-rotate').click();arcSlide(0,180);
+  const arc=$('rotation-arc'),oldRect=arc.rect;arc.rect={left:100,top:100,width:216,height:70.8};editor.beginMode('rotate');
+  const scale=.6,at=degrees=>{const p=arcPoint(degrees);return{clientX:100+p.x*scale,clientY:100+p.y*scale,pointerType:'touch'}};
+  const before=sofa.root.rotation.y,grip={...at(180),clientX:at(180).clientX+18};
+  assert.ok(Number($('arc-thumb-hit').attributes.r)*2*scale>=48);
+  arc.emit('pointerdown',grip);assert.equal(editor.dragging,true);assert.equal(sofa.root.rotation.y,before);
+  assert.equal(editor.setLibraryCollapsed(true),false);assert.equal(editor.libraryCollapsed,false);
+  arc.emit('pointermove',{...grip,clientX:grip.clientX+24});assert.ok(sofa.root.rotation.y>before);
+  arc.emit('pointercancel',grip);assert.equal(sofa.root.rotation.y,before);
+  arc.emit('keydown',{key:'Home'});const left={...at(0),clientX:at(0).clientX-18};
+  arc.emit('pointerdown',left);assert.equal($('arc-value').textContent,'0°');
+  arc.emit('pointermove',{...at(360),clientX:at(360).clientX+48});assert.equal($('arc-value').textContent,'360°');
+  arc.emit('pointermove',{...at(0),clientX:at(0).clientX-48});assert.equal($('arc-value').textContent,'0°');
+  arc.emit('pointercancel',left);editor.close(false);arc.rect=oldRect;
 });
 test('six colors preview immediately, affect one object, and confirm as one edit',()=>{
   editor.select(sofa.id);$('object-color').click();assert.equal($('object-palette-panel').hidden,false);const other=system.get('salon-chair-a'),otherColor=other.paint[0].color.getHexString(),before=system.historyLength;
@@ -223,6 +240,13 @@ test('floor styles survive saved layouts and legacy layouts retain their origina
 checkArchitecture({system,scene,camera,editor,canvas,controls,$,winEvents,project,tap,findHit,startLibraryDrag,test});
 checkWallHandles({system,scene,camera,editor,canvas,controls,$,winEvents,project,test});
 checkBuildingControls({system,scene,camera,editor,canvas,controls,$,winEvents,project,tap,test,initial});
+test('library collapse preserves browsing and active edits while resizing the scene both ways',()=>{
+  editor.setTab('catalog');categories.find(b=>b.dataset.category==='seating').click();editor.select(sofa.id);editor.beginMode('rotate');
+  $('library-list').scrollLeft=148;const cards=[...$('library-list').children],before=system.serialize(),history=system.historyLength,resizes=resizeCalls;
+  $('library-collapse-toggle').click();assert.equal(editor.libraryCollapsed,true);assert.equal($('editor-panel').hidden,true);assert.ok(body.classList.contains('library-collapsed'));assert.equal($('library-collapse-toggle').attributes['aria-expanded'],'false');assert.equal(editor.selectedId,sofa.id);assert.equal(editor.mode,'rotate');assert.equal(resizeCalls,resizes+1);
+  $('library-collapse-toggle').click();assert.equal(editor.libraryCollapsed,false);assert.equal($('editor-panel').hidden,false);assert.equal($('library-collapse-toggle').attributes['aria-expanded'],'true');assert.equal(resizeCalls,resizes+2);assert.equal($('library-list').scrollLeft,148);assert.deepEqual($('library-list').children,cards);assert.deepEqual(system.serialize(),before);assert.equal(system.historyLength,history);
+  editor.close(false);categories.find(b=>b.dataset.category==='all').click();
+});
 test('saved layout restores into a fresh editor without opening object controls',()=>{
   const saved=JSON.parse(storage.get(editor.storageKey));system.load(initial);renderer.domElement=new Element('canvas');const fresh=createSceneEditor({scene,camera,renderer,controls,furnitureSystem:system,thumbnailFactory});assert.deepEqual(system.serialize(),saved);assert.equal(fresh.selectedId,null);assert.equal($('object-ui').hidden,true);
 });

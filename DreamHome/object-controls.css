@@ -17,11 +17,12 @@
 .object-confirm>span{font-size:26px;font-weight:700;line-height:1;pointer-events:none}
 #object-rotation{position:absolute;left:52px;right:52px;pointer-events:none}
 .rotation-arc{display:block;width:100%;height:auto;touch-action:none;overflow:visible;pointer-events:none;filter:drop-shadow(0 2px 3px #24393330)}
-.arc-hit{fill:none;stroke:transparent;stroke-width:30;pointer-events:stroke;cursor:ew-resize}
+.arc-hit{fill:none;stroke:transparent;stroke-width:44;stroke-linecap:round;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:ew-resize}
 .arc-track{fill:none;stroke:#ffffe8;stroke-width:8;stroke-linecap:round;pointer-events:none}
 .arc-progress{fill:none;stroke:#76a46b;stroke-width:8;stroke-linecap:round;pointer-events:none}
 .arc-ticks{fill:none;stroke:#acba9f;stroke-width:1.5;pointer-events:none}
 .arc-thumb{fill:#fffef6;stroke:#507f4f;stroke-width:4;pointer-events:all;cursor:ew-resize}
+.arc-thumb-hit{fill:transparent;stroke:none;pointer-events:all;cursor:ew-resize}
 .arc-value{font-family:Georgia,serif;font-size:29px;fill:#365340;paint-order:stroke;stroke:#ffffe8;stroke-width:5px;stroke-linejoin:round;pointer-events:none}
 .arc-endpoint{font-size:10px;fill:#476047;paint-order:stroke;stroke:#ffffe8;stroke-width:3px;pointer-events:none}
 .orbit-button.color-option{width:38px;height:38px;border:3px solid #fffdf3;background-image:none}

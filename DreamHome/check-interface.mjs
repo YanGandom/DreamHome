@@ -22,6 +22,10 @@ check('bottom dock styles reserve scene space and cover narrow phones, landscape
 check('one accessible camera toggle replaces the four level buttons',()=>{
   assert.equal(ids.filter(id=>id==='camera-view-toggle').length,1);assert.ok(html.includes('aria-label="切换到俯视"'));assert.equal(html.includes('data-building-view='),false);assert.equal(ids.includes('building-views'),false);
 });
+check('collapsible dock keeps its accessible toggle outside the hidden panel and doubles the thumb',()=>{
+  const toggle=html.indexOf('id="library-collapse-toggle"'),panel=html.indexOf('<aside id="editor-panel"');assert.ok(toggle>0&&toggle<panel);assert.ok(html.includes('aria-controls="editor-panel" aria-expanded="true"'));
+  assert.ok(/id="arc-thumb"[^>]*r="18"/.test(html));assert.ok(ids.includes('arc-thumb-hit'));
+});
 check('loader checks every first-party JavaScript module before importing the scene',()=>{
   const files=JSON.parse(html.match(/const files=(\[[^;]+\]);/)[1].replaceAll("'",'"'));
   for(const file of files){const src=fs.readFileSync(new URL(file,import.meta.url),'utf8');if(file.startsWith('vendor/'))continue;for(const m of src.matchAll(/from ['"]\.\/([^'"]+)['"]/g))assert.ok(files.includes(m[1]),file+' imports unchecked '+m[1])}

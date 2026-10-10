@@ -43,7 +43,7 @@ export function createObjectControls({scene,camera,renderer,controls,system,occl
     for(const action of ['rotate','color']){const button=$('object-'+action);button.classList.toggle('active',mode===action);button.setAttribute('aria-pressed',String(mode===action))}
     const color=r.color||'#'+r.paint[0].color.getHexString();
     for(const button of palette.children){const selected=button.dataset.color===color;button.classList.toggle('active',selected);button.setAttribute('aria-pressed',String(selected))}
-    const p=arcPoint(rotationValue),start=`M${arcStart.x} ${arcStart.y}`;$('arc-thumb').setAttribute('cx',p.x);$('arc-thumb').setAttribute('cy',p.y);$('arc-progress').setAttribute('d',rotationValue===0?start:`${start} A${ROTATION_ARC.radius} ${ROTATION_ARC.radius} 0 0 1 ${p.x} ${p.y}`);$('arc-value').textContent=rotationValue+'°';arc.setAttribute('aria-valuenow',String(rotationValue));arc.setAttribute('aria-valuetext',rotationValue+' 度');
+    const p=arcPoint(rotationValue),start=`M${arcStart.x} ${arcStart.y}`;for(const id of ['arc-thumb','arc-thumb-hit']){$(id).setAttribute('cx',p.x);$(id).setAttribute('cy',p.y)}$('arc-progress').setAttribute('d',rotationValue===0?start:`${start} A${ROTATION_ARC.radius} ${ROTATION_ARC.radius} 0 0 1 ${p.x} ${p.y}`);$('arc-value').textContent=rotationValue+'°';arc.setAttribute('aria-valuenow',String(rotationValue));arc.setAttribute('aria-valuetext',rotationValue+' 度');
     layoutButtons();update();
   }
   function layoutButtons(){
@@ -55,6 +55,7 @@ export function createObjectControls({scene,camera,renderer,controls,system,occl
     buttons.forEach((button,i)=>{button.style.left=points[i].x+'px';button.style.top=points[i].y+offset+'px'});
     $('object-rotation').style.top='0px';
     popup.style.height=Math.max(...points.map(p=>p.y))+offset+24+'px';layoutWidth=width;
+    $('arc-thumb-hit').setAttribute('r',Math.max(22,24/arcScale()));
   }
   function update(){
     floorControls?.update();
@@ -131,10 +132,20 @@ export function createObjectControls({scene,camera,renderer,controls,system,occl
   $('object-delete').addEventListener('click',()=>{const id=selectedId;close();if(id)onRemove(id)});
   $('object-confirm').addEventListener('click',()=>close());
   for(const [name,color]of PALETTE){const button=document.createElement('button');button.type='button';button.className='orbit-button color-option';button.dataset.color=color;button.style.backgroundColor=color;button.setAttribute('aria-label',name);button.setAttribute('aria-pressed','false');button.addEventListener('click',()=>{if(mode==='color'&&active())system.colorPreview(selectedId,color)});palette.append(button)}
+  function arcScale(){return arc.getBoundingClientRect().width/ROTATION_ARC.width||1}
   const arcPosition=event=>{const r=arc.getBoundingClientRect();return{x:(event.clientX-r.left)*ROTATION_ARC.width/r.width,y:(event.clientY-r.top)*ROTATION_ARC.height/r.height}};
   const arcAngle=event=>{const p=arcPosition(event);return angleFromArcPoint(p.x,p.y)};
-  arc.addEventListener('pointerdown',event=>{if(mode!=='rotate'||event.button!==0||event.isPrimary===false)return;const p=arcPosition(event),radius=Math.hypot(p.x-ROTATION_ARC.cx,p.y-ROTATION_ARC.cy),angle=Math.atan2(p.x-ROTATION_ARC.cx,ROTATION_ARC.cy-p.y);if(Math.abs(radius-ROTATION_ARC.radius)>22||Math.abs(angle)>ROTATION_ARC.halfAngle+.10)return;event.preventDefault();event.stopImmediatePropagation();arc.focus({preventScroll:true});arcDrag={pointerId:event.pointerId,before:rotationValue};arc.setPointerCapture(event.pointerId);setAngle(arcAngle(event))});
-  arc.addEventListener('pointermove',event=>{if(arcDrag?.pointerId!==event.pointerId)return;event.preventDefault();setAngle(arcAngle(event))});
+  const rawArcAngle=event=>{const p=arcPosition(event);return(Math.atan2(p.x-ROTATION_ARC.cx,ROTATION_ARC.cy-p.y)/ROTATION_ARC.halfAngle+1)*180};
+  arc.addEventListener('pointerdown',event=>{
+    if(mode!=='rotate'||event.button!==0||event.isPrimary===false)return;
+    const p=arcPosition(event),scale=arcScale(),thumb=arcPoint(rotationValue),nearest=arcPoint(arcAngle(event));
+    const onThumb=Math.hypot(p.x-thumb.x,p.y-thumb.y)<=Math.max(22,24/scale);
+    if(!onThumb&&Math.hypot(p.x-nearest.x,p.y-nearest.y)*scale>22)return;
+    event.preventDefault();event.stopImmediatePropagation();arc.focus({preventScroll:true});
+    arcDrag={pointerId:event.pointerId,before:rotationValue,offset:onThumb?rotationValue-rawArcAngle(event):0};arc.setPointerCapture(event.pointerId);
+    if(!onThumb)setAngle(arcAngle(event));
+  });
+  arc.addEventListener('pointermove',event=>{if(arcDrag?.pointerId!==event.pointerId)return;event.preventDefault();setAngle(rawArcAngle(event)+arcDrag.offset)});
   arc.addEventListener('pointerup',event=>{if(arcDrag?.pointerId===event.pointerId)finishArc()});
   arc.addEventListener('pointercancel',()=>finishArc(true));arc.addEventListener('lostpointercapture',()=>finishArc(true));
   arc.addEventListener('keydown',event=>{const steps={ArrowLeft:-1,ArrowDown:-1,ArrowRight:1,ArrowUp:1,PageDown:-15,PageUp:15};let value;if(event.key in steps)value=rotationValue+steps[event.key]*(event.shiftKey?15:1);else if(event.key==='Home')value=0;else if(event.key==='End')value=360;else return;event.preventDefault();event.stopImmediatePropagation();setAngle(value)});
