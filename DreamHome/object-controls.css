@@ -1,0 +1,37 @@
+.selection-tip{font-size:11px;line-height:1.9;color:#829081;margin:0}
+.floor-ui{position:fixed;z-index:2;width:280px;height:84px;pointer-events:none;user-select:none}
+.floor-options{display:contents}
+.orbit-button.floor-option{width:48px;height:48px;overflow:hidden;border:3px solid #fffdf1;background:#e5dcc8}
+.floor-option img{width:100%;height:100%;object-fit:cover;pointer-events:none;user-select:none}
+.floor-option.active::after{content:'✓';position:absolute;inset:0;display:grid;place-items:center;font-size:22px;color:#fff;text-shadow:0 1px 4px #18351e,0 1px 2px #18351e}
+.floor-option.active{border-color:#94c675}
+.object-ui{position:fixed;z-index:2;width:360px;max-width:calc(100vw - 24px);pointer-events:none}
+.object-card{position:relative;width:100%;height:100%;pointer-events:none;user-select:none}
+.object-actions,.object-palette-panel,.object-palette,.object-finish{display:contents}
+.orbit-button{position:absolute;z-index:1;display:grid;place-items:center;width:44px;height:44px;padding:0;transform:translate(-50%,-50%);border:1px solid #ffffe6;border-radius:50%;color:#44664e;background:linear-gradient(145deg,#fffef1,#dfe9d5);box-shadow:0 4px 12px #203e4230,inset 0 1px #fff;pointer-events:auto;touch-action:none;cursor:pointer;transition:box-shadow .12s,filter .12s}
+.orbit-button:hover{filter:brightness(1.07);box-shadow:0 5px 15px #203e4245,inset 0 1px #fff}
+.orbit-button.active{border-color:#527c45;box-shadow:0 0 0 2px #86ad6c,0 4px 12px #203e4230}
+.orbit-button>svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.orbit-button.object-delete{color:#a36954;background:linear-gradient(145deg,#fff8eb,#efdccc)}
+.orbit-button.object-confirm{color:#fffef1;border-color:#cce9ae;background:linear-gradient(145deg,#8abd6c,#4c8e41)}
+.object-confirm>span{font-size:26px;font-weight:700;line-height:1;pointer-events:none}
+#object-rotation{position:absolute;left:52px;right:52px;pointer-events:none}
+.rotation-arc{display:block;width:100%;height:auto;touch-action:none;overflow:visible;pointer-events:none;filter:drop-shadow(0 2px 3px #24393330)}
+.arc-hit{fill:none;stroke:transparent;stroke-width:30;pointer-events:stroke;cursor:ew-resize}
+.arc-track{fill:none;stroke:#ffffe8;stroke-width:8;stroke-linecap:round;pointer-events:none}
+.arc-progress{fill:none;stroke:#76a46b;stroke-width:8;stroke-linecap:round;pointer-events:none}
+.arc-ticks{fill:none;stroke:#acba9f;stroke-width:1.5;pointer-events:none}
+.arc-thumb{fill:#fffef6;stroke:#507f4f;stroke-width:4;pointer-events:all;cursor:ew-resize}
+.arc-value{font-family:Georgia,serif;font-size:29px;fill:#365340;paint-order:stroke;stroke:#ffffe8;stroke-width:5px;stroke-linejoin:round;pointer-events:none}
+.arc-endpoint{font-size:10px;fill:#476047;paint-order:stroke;stroke:#ffffe8;stroke-width:3px;pointer-events:none}
+.orbit-button.color-option{width:38px;height:38px;border:3px solid #fffdf3;background-image:none}
+.orbit-button.color-option.active{box-shadow:0 0 0 2px #507849,0 4px 12px #203e4240}
+.orbit-button.color-option.active::after{content:'✓';color:white;text-shadow:0 1px 3px #16391e;font-size:18px;position:absolute;inset:0;display:grid;place-items:center}
+#scene canvas.can-select{cursor:pointer}
+#scene canvas.can-move{cursor:move}
+#scene canvas.is-dragging{cursor:grabbing!important}
+@media(max-width:650px){.object-ui{width:320px}.hint{max-width:94vw;white-space:normal;text-align:center;line-height:1.6}}@media(max-width:350px){.orbit-button{width:40px;height:40px}.orbit-button.color-option{width:32px;height:32px}}
+#scene canvas.can-resize-height{cursor:ns-resize}
+#scene canvas.can-resize-width{cursor:ew-resize}
+.wall-material-option{background-size:cover;background-position:center}
+.wall-material-option.active{outline:3px solid #50b95c;outline-offset:2px}

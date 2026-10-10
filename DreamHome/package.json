@@ -1,0 +1,17 @@
+{
+  "name": "homestead-three-game",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "description": "筑梦小屋: a Three.js building and furnishing sandbox with a responsive model dock",
+  "scripts": {
+    "start": "node server.cjs",
+    "build": "node build.mjs",
+    "check": "node --check scene.js && node --check furniture-system.js && node --check editor.js && node --check object-controls.js && node --check ground-selection.js && node --check placement.js && node --check model-thumbnails.js && node --check floor-system.js && node --check floor-controls.js && node --check architecture-system.js && node --check wall-handles.js && node --check building-system.js && node --check building-controls.js && node --check scene-menu.js",
+    "test": "node check-editor.mjs && node check-building.mjs && node check-loading.mjs && node check-interface.mjs",
+    "setup": "node setup.cjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

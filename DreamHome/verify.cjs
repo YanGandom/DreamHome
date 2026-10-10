@@ -1,0 +1,22 @@
+const fs=require('fs'),path=require('path');
+const {chromium}=require('C:/Users/asi/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
+(async()=>{
+ for(const file of ['three.module.js','OrbitControls.js','RoundedBoxGeometry.js','BufferGeometryUtils.js'])if(!fs.existsSync(path.join(__dirname,'vendor',file)))throw Error('Missing vendor/'+file+'; run setup.cjs before browser verification.');
+ const executablePath=['C:/Program Files/Google/Chrome/Application/chrome.exe','C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe','C:/Program Files/Microsoft/Edge/Application/msedge.exe'].find(p=>fs.existsSync(p));
+ const browser=await chromium.launch({headless:true,executablePath});
+ const page=await browser.newPage({viewport:{width:1600,height:1100},deviceScaleFactor:1});
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+ await page.goto('http://127.0.0.1:4173',{waitUntil:'networkidle'});
+ await page.waitForFunction(()=>window.__sceneReady===true,null,{timeout:60000});
+ await page.waitForTimeout(1200);
+ fs.mkdirSync(path.join(__dirname,'previews'),{recursive:true});
+ await page.screenshot({path:path.join(__dirname,'previews/overview.png')});
+ const stats=await page.evaluate(()=>({meshes:window.__winterScene.stats,drawCalls:window.__winterScene.renderer.info.render.calls,triangles:window.__winterScene.renderer.info.render.triangles}));
+ await page.getByRole('button',{name:'酒店大堂',exact:true}).click();await page.waitForTimeout(1200);await page.screenshot({path:path.join(__dirname,'previews/lobby.png')});
+ await page.getByRole('button',{name:'会客厅',exact:true}).click();await page.waitForTimeout(1200);await page.screenshot({path:path.join(__dirname,'previews/salon.png')});
+ await page.getByRole('button',{name:'夜景',exact:true}).click();await page.getByRole('button',{name:'全景',exact:true}).click();await page.waitForTimeout(1200);await page.screenshot({path:path.join(__dirname,'previews/night.png')});
+ await page.getByRole('button',{name:'设计参考'}).click();if(!await page.locator('dialog').isVisible())throw Error('Reference dialog did not open');await page.getByRole('button',{name:'关闭参考图'}).click();
+ await page.getByRole('button',{name:'飘雪',exact:true}).click();if(await page.getByRole('button',{name:'飘雪',exact:true}).getAttribute('aria-pressed')!=='false')throw Error('Snow toggle failed');
+ await page.setViewportSize({width:390,height:844});await page.evaluate(()=>window.__winterScene.goView('overview',true));await page.waitForTimeout(500);await page.screenshot({path:path.join(__dirname,'previews/mobile.png')});
+ console.log(JSON.stringify({errors,stats},null,2));await browser.close();if(errors.length)process.exitCode=1;
+})().catch(e=>{console.error(e);process.exitCode=1});
