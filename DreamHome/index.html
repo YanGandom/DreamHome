@@ -22,7 +22,7 @@
       <button id="capture"><span class="menu-icon" aria-hidden="true">↓</span><span>保存画面</span><span class="menu-end" aria-hidden="true">PNG</span></button>
     </div>
   </div>
-  <nav id="building-views" class="building-views" aria-label="建筑视图"><button data-building-view="outside" class="active" aria-pressed="true" title="室外总览">⌂<span>室外</span></button><button data-building-view="1" aria-pressed="false">1F<span>一楼</span></button><button data-building-view="2" aria-pressed="false">2F<span>二楼</span></button><button data-building-view="roof" aria-pressed="false">⌃<span>屋顶</span></button></nav>
+  <button id="camera-view-toggle" class="camera-view-toggle" type="button" aria-label="切换到俯视" aria-pressed="false" title="切换到俯视"><span id="camera-top-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4Z M4 12h16 M12 4v16"/></svg></span><span id="camera-original-icon" aria-hidden="true" hidden><svg viewBox="0 0 24 24"><path d="m3 8 9-5 9 5v9l-9 5-9-5Z M3 8l9 5 9-5 M12 13v9"/></svg></span><span id="camera-view-label">俯视</span></button>
   <div class="hint" id="scene-hint">轻点布置 · 拖动环绕 · 双指缩放</div>
   <section id="object-ui" class="object-ui" aria-label="家具操作" hidden>
     <div class="object-card">
@@ -93,7 +93,7 @@
       const files=['vendor/three.module.js','vendor/OrbitControls.js','vendor/RoundedBoxGeometry.js','vendor/BufferGeometryUtils.js','scene.js','furniture-system.js','editor.js','object-controls.js','ground-selection.js','placement.js','architecture-system.js','floor-system.js','floor-controls.js','model-thumbnails.js','wall-handles.js','building-system.js','building-controls.js','scene-menu.js'];
       await Promise.all(files.map(checkFile));
       message.textContent='依赖已就绪，正在创建 3D 场景…';
-      await import('./scene.js?v=20261010-homestead-13');
+      await import('./scene.js?v=20261010-camera-toggle-1');
     }catch(error){fail(error)}
   </script>
 </body>

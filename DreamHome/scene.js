@@ -257,9 +257,22 @@ for(let i=0;i<snowCount;i++){let x=(rnd()-.5)*24,z=(rnd()-.5)*22;if(Math.abs(x)<
 const sg=new THREE.BufferGeometry();sg.setAttribute('position',new THREE.BufferAttribute(snowPos,3));const snowTexture=canvasTex((c,w,h)=>{const gr=c.createRadialGradient(w/2,h/2,0,w/2,h/2,w/2);gr.addColorStop(0,'#ffffff');gr.addColorStop(.35,'#ffffffe0');gr.addColorStop(1,'#ffffff00');c.fillStyle=gr;c.fillRect(0,0,w,h)},64,64);const snow=new THREE.Points(sg,new THREE.PointsMaterial({map:snowTexture,color:'#ffffff',size:.13,transparent:true,opacity:.88,depthWrite:false}));scene.add(snow);
 
 // Camera presets and user controls.
-const views={overview:{p:[18,18,24],t:[0,2.3,1]},salon:{p:[3.5,10,16],t:[-4.4,2.3,-.1]},lobby:{p:[14,10,15],t:[3.8,2,-.1]},courtyard:{p:[9,9,19],t:[-1.2,.7,6.2]},top:{p:[.1,27,2.4],t:[0,0,1]}};
-let tween=null,night=false;function goView(name,instant=false){const v=views[name];const p=new THREE.Vector3(...v.p),t=new THREE.Vector3(...v.t);if(instant){camera.position.copy(p);controls.target.copy(t)}else tween={start:performance.now(),from:camera.position.clone(),fromT:controls.target.clone(),to:p,toT:t};document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));}
-goView('overview',true);controls.update();document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>goView(b.dataset.view)));
+const views={overview:{p:[18,18,24],t:[0,2.3,1]},salon:{p:[3.5,10,16],t:[-4.4,2.3,-.1]},lobby:{p:[14,10,15],t:[3.8,2,-.1]},courtyard:{p:[9,9,19],t:[-1.2,.7,6.2]},top:{p:[0,38,1],t:[0,2.3,1]}};
+let tween=null,night=false,cameraView='overview';
+function syncCameraView(name){
+  cameraView=name==='top'?'top':'overview';const top=cameraView==='top',button=document.getElementById('camera-view-toggle');
+  controls.minPolarAngle=top?0:.08;
+  button.setAttribute('aria-pressed',String(top));button.setAttribute('aria-label',top?'返回原始位置':'切换到俯视');button.title=top?'返回原始位置':'切换到俯视';button.classList.toggle('active',top);
+  document.getElementById('camera-view-label').textContent=top?'原始位置':'俯视';
+  document.getElementById('camera-top-icon').hidden=top;document.getElementById('camera-original-icon').hidden=!top;
+}
+function stopCameraDrift(){
+  controls.autoRotate=false;toggle('rotate',false);
+  // Flush OrbitControls inertia before starting a precise camera transition.
+  const damping=controls.enableDamping;controls.enableDamping=false;controls.update();controls.enableDamping=damping;
+}
+function goView(name,instant=false){const v=views[name];stopCameraDrift();syncCameraView(name);const p=new THREE.Vector3(...v.p),t=new THREE.Vector3(...v.t);if(instant){tween=null;camera.position.copy(p);controls.target.copy(t);controls.update()}else tween={start:performance.now(),from:camera.position.clone(),fromT:controls.target.clone(),to:p,toT:t};}
+goView('overview',true);
 document.querySelector('#rotate').onclick=()=>{controls.autoRotate=!controls.autoRotate;toggle('rotate',controls.autoRotate)};
 document.querySelector('#snow').onclick=()=>{snow.visible=!snow.visible;toggle('snow',snow.visible)};
 function setLampGlow(intensity,pointIntensity){M.glow.emissiveIntensity=intensity;for(const root of [scene,...[...furnitureSystem.templates.values()].map(t=>t.root)])root.traverse(o=>{if(o.material?.userData.sourceMaterialId===M.glow.uuid)o.material.emissiveIntensity=intensity;if(o.isPointLight&&o.userData.furnitureId)o.intensity=pointIntensity})}
@@ -274,7 +287,8 @@ scene.updateMatrixWorld(true);
 const buildingSystem=createBuildingSystem({scene,parent:world,system:furnitureSystem,floorSystem});
 furnitureSystem.setConstruction(buildingSystem);
 furnitureSystem.setPlacement(createPlacement({surfaces:()=>world.children,architecture:architectureSystem,floorSystem,getFurniture:()=>furnitureSystem.all()}));
-const editor=createSceneEditor({scene,camera,renderer,controls,furnitureSystem,occluders:world.children,onResize:resizeScene,toast,onInteract:()=>{tween=null;controls.autoRotate=false;toggle('rotate',false)},onBuildingView:(view,room)=>{const target=room?new THREE.Vector3(room.x,buildingSystem.height(room)+1,room.z):new THREE.Vector3(0,view==='2'?4:2,0),distance=room?Math.max(room.width,room.depth)*1.25:18;const to=view==='roof'?target.clone().add(new THREE.Vector3(.1,distance*1.5,1)):target.clone().add(new THREE.Vector3(distance,distance*.9,distance*1.2));tween={start:performance.now(),from:camera.position.clone(),fromT:controls.target.clone(),to,toT:target}}});
+const editor=createSceneEditor({scene,camera,renderer,controls,furnitureSystem,occluders:world.children,onResize:resizeScene,toast,onInteract:()=>{tween=null;controls.autoRotate=false;toggle('rotate',false)},onBuildingView:(view,room)=>{stopCameraDrift();syncCameraView('overview');const target=room?new THREE.Vector3(room.x,buildingSystem.height(room)+1,room.z):new THREE.Vector3(0,view==='2'?4:2,0),distance=room?Math.max(room.width,room.depth)*1.25:18;const to=view==='roof'?target.clone().add(new THREE.Vector3(.1,distance*1.5,1)):target.clone().add(new THREE.Vector3(distance,distance*.9,distance*1.2));tween={start:performance.now(),from:camera.position.clone(),fromT:controls.target.clone(),to,toT:target}}});
+document.getElementById('camera-view-toggle').onclick=()=>{if(editor.dragging)return;editor.close();editor.builder?.close();const next=cameraView==='top'?'overview':'top';if(next==='overview')buildingSystem.setView('outside');goView(next)};
 resizeScene();
 let last=performance.now();function animate(now){requestAnimationFrame(animate);const dt=Math.min(.05,(now-last)/1000);last=now;const t=now*.001;if(tween){const a=Math.min(1,(now-tween.start)/1000),s=a*a*(3-2*a);camera.position.lerpVectors(tween.from,tween.to,s);controls.target.lerpVectors(tween.fromT,tween.toT,s);if(a===1)tween=null}for(const f of flames){f.mesh.scale.y=f.base*(.85+.15*Math.sin(t*9+f.phase));f.mesh.position.x+=Math.sin(t*6+f.phase)*dt*.014}firelight.intensity=(night?41:28)+Math.sin(t*10)*2;if(snow.visible){const p=sg.attributes.position;for(let i=0;i<snowCount;i++){p.array[i*3+1]-=snowVel[i]*dt;p.array[i*3]+=Math.sin(t*.35+i)*dt*.09;if(p.array[i*3+1]<.2)p.array[i*3+1]=12.4}p.needsUpdate=true}if(!editor.dragging)controls.update();editor.update();renderer.render(scene,camera)}
 requestAnimationFrame(animate);document.querySelector('#loading').classList.add('done');

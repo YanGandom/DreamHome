@@ -19,6 +19,9 @@ check('bottom dock styles reserve scene space and cover narrow phones, landscape
   const base=fs.readFileSync(new URL('./style.css',import.meta.url),'utf8'),dock=fs.readFileSync(new URL('./editor.css',import.meta.url),'utf8');
   assert.ok(base.includes('calc(var(--dock-height) + var(--safe-bottom))'));assert.ok(dock.includes('inset:auto 0 0'));assert.ok(base.includes('env(safe-area-inset-bottom'));assert.ok(base.includes('orientation:landscape'));assert.ok(dock.includes('max-width:370px'));assert.ok(dock.includes('overflow-x:auto'));assert.equal(dock.includes('--sidebar-width'),false);
 });
+check('one accessible camera toggle replaces the four level buttons',()=>{
+  assert.equal(ids.filter(id=>id==='camera-view-toggle').length,1);assert.ok(html.includes('aria-label="切换到俯视"'));assert.equal(html.includes('data-building-view='),false);assert.equal(ids.includes('building-views'),false);
+});
 check('loader checks every first-party JavaScript module before importing the scene',()=>{
   const files=JSON.parse(html.match(/const files=(\[[^;]+\]);/)[1].replaceAll("'",'"'));
   for(const file of files){const src=fs.readFileSync(new URL(file,import.meta.url),'utf8');if(file.startsWith('vendor/'))continue;for(const m of src.matchAll(/from ['"]\.\/([^'"]+)['"]/g))assert.ok(files.includes(m[1]),file+' imports unchecked '+m[1])}
