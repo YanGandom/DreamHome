@@ -170,7 +170,7 @@ groupBuild(1.18,1.06,-2.89,0,()=>{box(0,.06,0,.76,.12,.65,M.woodLight,.035);for(
 furnishing('lobby-rug','几何纹会谈地毯','rugs',()=>rug(4.11,.06,3.14,2.49,1));
 furnishing('lobby-chair-a','金色会客椅 · 左','seating',()=>sofa(3.22,-.35,.95,M.yellow,-.42),[M.yellow]);
 furnishing('lobby-chair-b','金色会客椅 · 右','seating',()=>sofa(5.12,-.23,.95,M.yellow,.42),[M.yellow]);
-furnishing('lobby-round-table','花束圆茶桌','tables',()=>{lathe(4.13,1.05,.71,[[.34,0],[.36,.06],[.13,.12],[.09,.48],[.20,.57],[.48,.61],[.49,.69]],M.woodDark);cup(4.26,1.77,.73);pot(4.12,1.73,.68,.36)},[M.woodDark]);
+furnishing('lobby-round-table','花束圆茶桌','tables',()=>{lathe(4.13,1.05,.71,[[0,0],[.34,0],[.36,.06],[.13,.12],[.09,.48],[.20,.57],[.48,.61],[.49,.69],[0,.69]],M.woodDark);cup(4.26,1.77,.73);pot(4.12,1.73,.68,.36)},[M.woodDark]);
 // Right front couch with a chaise opposite the hearth.
 furnishing('hearth-rug','炉边花纹地毯','rugs',()=>rug(3.22,3.04,4.66,2.7,0));
 furnishing('hearth-sofa','暖金双人沙发','seating',()=>{sofa(2.59,2.75,2.0,M.yellow,0);pillow(2.03,2.20,2.66,M.paper,.26);pillow(3.13,2.15,2.66,M.greenLight,.24)},[M.yellow]);

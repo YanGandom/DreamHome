@@ -124,7 +124,7 @@
       const files=['vendor/three.module.js','vendor/OrbitControls.js','vendor/RoundedBoxGeometry.js','vendor/BufferGeometryUtils.js','scene.js','game-rules.js','game-flow.js','progression.js','progression-ui.js','levels.js','level-config.js','level-presets.js','settings.js','game-audio.js','i18n.js','locale-data.js','furniture-system.js','editor.js','object-controls.js','scene-picking.js','ground-selection.js','placement.js','architecture-system.js','wall-mounting.js','wall-stacking.js','floor-system.js','floor-controls.js','model-thumbnails.js','railing-system.js','wall-handles.js','foundation-system.js','outdoor-plots.js','building-system.js','building-controls.js','scene-menu.js','scatter-system.js','scatter-controls.js'];
       await Promise.all(files.map(checkFile));
       message.textContent='依赖已就绪，正在创建 3D 场景…';
-        await import('./scene.js?v=20261012-interface-2');
+        await import('./scene.js?v=20261012-model-fixes-1');
         const {startGame}=await import('./game-flow.js');startGame(window.__winterScene);
     }catch(error){fail(error)}
   </script>

@@ -28,6 +28,12 @@ export function createGroundSelection(scene,name='GroundSelection'){
     fill.scale.set(side,1,side);border.scale.copy(fill.scale);
     if(record.kind==='wall'){fill.scale.set(bounds.max.x-bounds.min.x+.2,1,bounds.max.z-bounds.min.z+.2);border.scale.copy(fill.scale)}
     root.rotation.set(0,0,0);
+    if(record.railing){
+      const size=record.localBounds.getSize(new THREE.Vector3()).multiply(record.root.scale);
+      const center=record.root.localToWorld(record.localBounds.getCenter(new THREE.Vector3()));
+      root.position.set(center.x,floor,center.z);root.rotation.y=record.root.rotation.y;
+      fill.scale.set(size.x+.2,1,size.z+.2);border.scale.copy(fill.scale);
+    }
     if(record.kind==='mounted'){
       const wallAngle=record.root.rotation.y+(record.mountWallId==='wall-3'?Math.PI/2:0),normal=new THREE.Vector3(Math.sin(wallAngle),0,Math.cos(wallAngle));
       root.rotation.set(Math.PI/2,wallAngle,0,'YXZ');root.position.copy(bounds.getCenter(new THREE.Vector3())).addScaledVector(normal,Math.min(bounds.max.x-bounds.min.x,bounds.max.z-bounds.min.z)/2+.025);
@@ -35,7 +41,10 @@ export function createGroundSelection(scene,name='GroundSelection'){
       fill.scale.set(width+.15,1,bounds.max.y-bounds.min.y+.15);border.scale.copy(fill.scale);
     }
     arrows.visible=moving;
-    const length=THREE.MathUtils.clamp(side*.23,.50,.82),distanceX=fill.scale.x/2+length/2+.16,distanceZ=fill.scale.z/2+length/2+.16;
+    // Movement arrows retain the world X/Z axes used by drag constraints.
+    arrows.rotation.y=record.railing?-root.rotation.y:0;
+    const arrowWidth=record.railing?bounds.max.x-bounds.min.x+.2:fill.scale.x,arrowDepth=record.railing?bounds.max.z-bounds.min.z+.2:fill.scale.z;
+    const length=THREE.MathUtils.clamp(side*.23,.50,.82),distanceX=arrowWidth/2+length/2+.16,distanceZ=arrowDepth/2+length/2+.16;
     for(const arrow of arrows.children){const [x,z]=arrow.userData.direction;arrow.position.set(x*distanceX,.008,z*distanceZ);arrow.scale.set(length,1,length)}
     root.updateMatrixWorld(true);return bounds;
   }
