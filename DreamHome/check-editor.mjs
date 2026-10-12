@@ -32,8 +32,8 @@ class Element{
     for(const {fn}of [...this.listeners.get(type)||[]].sort((a,b)=>Number(b.capture)-Number(a.capture))){fn(e);if(e.stopped)break}return e;
   }
   click(){if(!this.disabled)this.emit('click')}
-  append(...children){this.children.push(...children)}
-  replaceChildren(...children){this.children=children}
+  append(...children){children.forEach(c=>c.parentElement=this);this.children.push(...children)}
+  replaceChildren(...children){this.children.forEach(c=>c.parentElement=null);this.children=[];this.append(...children)}
   setAttribute(key,value){this.attributes[key]=String(value)}
   getBoundingClientRect(){return this.rect||{left:0,top:0,width:1600,height:1100}}
   setPointerCapture(id){this.capture=id}
@@ -191,7 +191,7 @@ test('button edge gaps are halved without overlap at desktop and narrow widths',
 });
 function libraryCard(id){
   editor.close();editor.setCategory('all');
-  const card=$('library-list').children.find(c=>c.dataset.restoreId===id||c.dataset.itemId===id);assert.ok(card,id);return card;
+  const family=system.get(id)?.catalogId||id;const card=$('library-list').children.find(c=>c.dataset.restoreId===id||c.dataset.itemId===family);assert.ok(card,id);return card;
 }
 const libraryPoint={clientX:1730,clientY:400};
 function startLibraryDrag(id,point){const card=libraryCard(id);card.emit('pointerdown',libraryPoint);winEvents.emit('pointermove',point);return card}
@@ -269,13 +269,13 @@ checkWallHandles({system,scene,camera,editor,canvas,controls,$,winEvents,project
 checkBuildingControls({system,scene,camera,editor,canvas,controls,$,winEvents,project,tap,test,initial});
 checkSelection({system,scene,camera,editor,canvas,controls,project,tap,test,initial});
 checkScatter({system,scene,camera,editor,controls,canvas,tap,$,winEvents,categories,project,test,initial,storage});
-test('railing side strips resize in touch editing and stair color menus contain exactly three finishes',()=>{
+test('railing side strips resize in touch editing and stair color menus include the entrance original finish',()=>{
   editor.close();editor.builder.close();system.load(initial);const r=system.add('balcony-railing');system.move(r.id,24,0,.14);camera.position.set(24,10,12);controls.target.set(24,0,0);controls.update();camera.updateMatrixWorld(true);editor.select(r.id);
   const handles=scene.getObjectByName('WallResizeHandles'),right=handles.getObjectByName('WallResize-right');assert.equal(handles.visible,true);assert.equal(handles.getObjectByName('WallResize-top').visible,false);
   const before=system.serialize(),width=r.railingWidth,start=project(right.getWorldPosition(new THREE.Vector3())),end=project(right.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(1,0,0))),cam=camera.position.clone();
   canvas.emit('pointerdown',{...start,pointerType:'touch'});assert.equal(right.userData.resizeActive,true);canvas.emit('pointermove',{...end,pointerType:'touch'});assert.ok(r.railingWidth>width+.8);canvas.emit('pointercancel',end);assert.deepEqual(system.serialize(),before);assert.ok(camera.position.equals(cam));
   canvas.emit('pointerdown',start);canvas.emit('pointermove',end);canvas.emit('pointerup',end);$('object-confirm').click();const saved=system.serialize();system.undo();assert.deepEqual(system.serialize(),before);system.redo();assert.deepEqual(system.serialize(),saved);
-  for(const id of [r.id,'stair-left','stair-right','stair-entrance']){editor.select(id);$('object-color').click();assert.equal($('object-palette').children.length,3);assert.deepEqual($('object-palette').children.map(b=>b.attributes['aria-label']),['胡桃木色','原木色','白色']);$('object-palette').children[2].click();assert.equal(system.get(id).color,'#f4f1e8');$('object-confirm').click()}
+  for(const id of [r.id,'stair-left','stair-right','stair-entrance']){editor.select(id);$('object-color').click();assert.equal($('object-palette').children.length,id==='stair-entrance'?4:3);assert.deepEqual($('object-palette').children.slice(0,3).map(b=>b.attributes['aria-label']),['胡桃木色','原木色','白色']);if(id==='stair-entrance'){$('object-palette').children[3].click();assert.equal(system.get(id).color,'#902e42')}$('object-palette').children[2].click();assert.equal(system.get(id).color,'#f4f1e8');$('object-confirm').click()}
   editor.select(sofa.id);$('object-color').click();assert.equal($('object-palette').children.length,6);editor.close(false);system.load(initial);overhead();
 });
 test('library collapse preserves browsing and active edits while resizing the scene both ways',()=>{

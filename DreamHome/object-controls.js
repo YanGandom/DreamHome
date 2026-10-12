@@ -1,4 +1,5 @@
-import {WOOD_FINISHES} from './railing-system.js';
+import {decorateLock} from './progression.js';
+import {woodFinishesFor} from './railing-system.js';
 import * as THREE from './vendor/three.module.js';
 import {pickSceneSurface} from './scene-picking.js';
 import {createGroundSelection} from './ground-selection.js';
@@ -42,10 +43,10 @@ export function createObjectControls({scene,camera,renderer,controls,system,occl
     $('object-color').hidden=special||r.kind==='scatter';$('object-delete').hidden=special;
     $('object-material').hidden=!wall||special;$('object-rotate').hidden=r.kind==='scatter';
     $('object-material-panel').hidden=mode!=='material';
-    if(wall)for(const button of $('wall-material-options').children)button.classList.toggle('active',button.dataset.material===r.wallMaterial);
+    if(wall)for(const button of $('wall-material-options').children){decorateLock(button,system.progression,button.dataset.material,true);button.classList.toggle('active',button.dataset.material===r.wallMaterial)}
     for(const action of ['rotate','color']){const button=$('object-'+action);button.classList.toggle('active',mode===action);button.setAttribute('aria-pressed',String(mode===action))}
     const color=r.color||'#'+r.paint[0].color.getHexString();
-    for(const button of palette.children){const selected=button.dataset.color===color;button.classList.toggle('active',selected);button.setAttribute('aria-pressed',String(selected))}
+    for(const button of palette.children){decorateLock(button,system.progression,button.dataset.color,true);const selected=button.dataset.color===color;button.classList.toggle('active',selected);button.setAttribute('aria-pressed',String(selected))}
     const p=arcPoint(rotationValue),start=`M${arcStart.x} ${arcStart.y}`;for(const id of ['arc-thumb','arc-thumb-hit']){$(id).setAttribute('cx',p.x);$(id).setAttribute('cy',p.y)}$('arc-progress').setAttribute('d',rotationValue===0?start:`${start} A${ROTATION_ARC.radius} ${ROTATION_ARC.radius} 0 0 1 ${p.x} ${p.y}`);$('arc-value').textContent=rotationValue+'°';arc.setAttribute('aria-valuenow',String(rotationValue));arc.setAttribute('aria-valuetext',rotationValue+' 度');
     layoutButtons();update();
   }
@@ -137,8 +138,8 @@ export function createObjectControls({scene,camera,renderer,controls,system,occl
   $('object-delete').addEventListener('click',()=>{const id=selectedId;close();if(id)onRemove(id)});
   $('object-confirm').addEventListener('click',()=>close());
   let paletteKind=null;
-  function syncPalette(record){const kind=record?.woodFinish?'wood':'standard';if(kind===paletteKind)return;paletteKind=kind;palette.replaceChildren();
-    for(const [name,color]of kind==='wood'?WOOD_FINISHES.map(f=>[f.name,f.color]):PALETTE){const button=document.createElement('button');button.type='button';button.className='orbit-button color-option';button.dataset.color=color;button.style.backgroundColor=color;button.setAttribute('aria-label',name);button.setAttribute('aria-pressed','false');button.addEventListener('click',()=>{if(mode==='color'&&active())system.colorPreview(selectedId,color)});palette.append(button)}
+  function syncPalette(record){const kind=record?.sourceId==='stair-entrance'?'entrance':record?.woodFinish?'wood':'standard';if(kind===paletteKind)return;paletteKind=kind;palette.replaceChildren();
+    for(const [name,color]of kind!=='standard'?woodFinishesFor(record).map(f=>[f.name,f.color]):PALETTE){const button=document.createElement('button');button.type='button';button.className='orbit-button color-option';button.dataset.color=color;button.style.backgroundColor=color;button.setAttribute('aria-label',name);button.setAttribute('aria-pressed','false');button.addEventListener('click',()=>{if(mode==='color'&&active())system.colorPreview(selectedId,color)});palette.append(button)}
   }
   function arcScale(){return arc.getBoundingClientRect().width/ROTATION_ARC.width||1}
   const arcPosition=event=>{const r=arc.getBoundingClientRect();return{x:(event.clientX-r.left)*ROTATION_ARC.width/r.width,y:(event.clientY-r.top)*ROTATION_ARC.height/r.height}};

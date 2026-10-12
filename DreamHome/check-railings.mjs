@@ -20,4 +20,11 @@ test('rail dimensions survive cancel, delete restore, copy and undo without chan
   s.beginGesture();s.resizeRailingPreview(r.id,'left',1,{position:r.root.position.clone(),width:r.railingWidth});s.cancelGesture();assert.deepEqual(s.serialize(),after);s.remove(r.id);s.restore(r.id);near(r.railingWidth,after.items.find(i=>i.id===r.id).railingWidth);near(s.templates.get('balcony-railing').railingWidth,template);const copy=s.add('balcony-railing');near(copy.railingWidth,template);assert.notEqual(copy.root.children[0].geometry,r.root.children[0].geometry);
   const legacy=structuredClone(after);for(const i of legacy.items)delete i.railingWidth;s.loadSaved(legacy);near(s.get(r.id).railingWidth,template);
 });
+test('entrance original finish is the fourth option and default, with original accents and safe save migration',()=>{
+  const verify=r=>{assert.equal(r.color,'#902e42');r.root.traverse(o=>{if(o.isMesh)assert.equal('#'+o.material.color.getHexString(),o.material.userData.baseColor)})};
+  verify(s.get('stair-entrance'));verify(s.add('stair-entrance'));verify(s.catalog().find(r=>r.sourceId==='stair-entrance'));
+  const old=s.serialize(),entrance=old.items.find(i=>i.id==='stair-entrance');delete entrance.entranceFinishVersion;entrance.color='#60402e';s.loadSaved(old);verify(s.get('stair-entrance'));
+  entrance.color='#f4f1e8';s.loadSaved(old);assert.equal(s.get('stair-entrance').color,'#f4f1e8');s.setColor('stair-entrance','#60402e');const saved=s.serialize();s.loadSaved(saved);assert.equal(s.get('stair-entrance').color,'#60402e');assert.deepEqual(s.serialize(),saved);
+  s.setColor('stair-entrance','#902e42');verify(s.get('stair-entrance'));s.undo();assert.equal(s.get('stair-entrance').color,'#60402e');s.redo();verify(s.get('stair-entrance'));
+});
 s.load(initial);console.log(JSON.stringify({passed:cases.length,cases},null,2));

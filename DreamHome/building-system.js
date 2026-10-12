@@ -1,3 +1,4 @@
+import {limitLayout} from './game-rules.js';
 import {createOutdoorStyles,createOutdoorPlot,animateOutdoorPlots} from './outdoor-plots.js';
 import * as THREE from './vendor/three.module.js';
 import {createRoomFoundation,createFoundationGround,GROUND_TOP,ORIGINAL_FOUNDATION_COLOR} from './foundation-system.js';
@@ -58,6 +59,7 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
   })}
   function validateRoom(r,previous=null){
     const balcony=r.level===2;
+    if(system.levelRule&&(r.width>system.levelRule.width||r.depth>system.levelRule.depth))return fail('本关地基最大 '+system.levelRule.width+' × '+system.levelRule.depth+' 米');
     if(![r.x,r.z,r.width,r.depth].every(Number.isFinite)||r.width<(balcony?1:3)||r.width>20||r.depth<(balcony?1:3)||r.depth>20)return fail('地基长宽最大为 20 × 20 米');
     if(Math.abs(r.x)>65||Math.abs(r.z)>65)return fail('请在建筑附近添加房间');
     const b=boxOf(r);if(r.level===1&&fixedAreas.some(a=>overlap(b,boxOf(a))))return fail('地基不能与现有建筑重叠');
@@ -81,7 +83,7 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
     for(let i=1;i<xs.length;i++)for(let j=1;j<zs.length;j++){const x=(xs[i-1]+xs[i])/2,z=(zs[j-1]+zs[j])/2;if(!bases.some(v=>x>=v.minX&&x<=v.maxX&&z>=v.minZ&&z<=v.maxZ))return false}return true;
   }
   function snapRoom(r){const candidate={...r,x:snap(r.x),z:snap(r.z)};for(const other of [...fixedAreas,...state.rooms]){if(other.id===r.id||other.level!==r.level)continue;for(const axis of ['x','z']){const dim=axis==='x'?'width':'depth',cross=axis==='x'?'z':'x',crossSize=axis==='x'?'depth':'width';if(Math.abs(candidate[cross]-other[cross])>(r[crossSize]+other[crossSize])/2+.3)continue;for(const side of [-1,1]){const target=other[axis]+side*(other[dim]+r[dim])/2;if(Math.abs(candidate[axis]-target)<.3)candidate[axis]=target}}}return candidate}
-  function addRoom(point,level=1,dimensions={}){
+  function addRoom(point,level=1,dimensions={}){if(system.canAdd&&!system.canAdd())return fail('场景最多摆放 200 件物件，请先删除一些物件');
     if(state.rooms.length>=BUILD_LIMITS.maxRooms)return fail('最多可建造 16 个房间');
     const r=snapRoom({id:next('room'),type:'room',x:point.x,z:point.z,width:dimensions.width??6,depth:dimensions.depth??6,...(dimensions.elevation!==undefined?{elevation:dimensions.elevation}:{}),level:level===2?2:1,color:'#eee1cb',floorStyle:'wood-planks',floorRotation:0,roof:null});
     if(!validateRoom(r))return false;state.rooms.push(r);redraw();return r.id;
@@ -93,7 +95,7 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
   }
   function addUpper(point){const draft=upperDraft(point);return addRoom(draft,2,draft)}
   function validGround(r){return [r.x,r.z,r.width,r.depth].every(Number.isFinite)&&Math.abs(r.x)<=65&&Math.abs(r.z)<=65&&r.width>=3&&r.width<=24&&r.depth>=3&&r.depth<=24||fail('地面长宽需要在 3–24 米之间，并放在建筑附近')}
-  function addGround(point){
+  function addGround(point){if(system.canAdd&&!system.canAdd())return fail('场景最多摆放 200 件物件，请先删除一些物件');
     if(state.grounds.length>=32)return fail('最多可添加 32 块地面');
     const r={id:next('ground'),type:'ground',x:snap(point.x),z:snap(point.z),width:6,depth:6};
     if(!validGround(r))return false;state.grounds.push(r);redraw();return r.id;
@@ -106,7 +108,7 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
     const b=boxOf(r);if(system.placement)for(const x of [b.minX+.01,(b.minX+b.maxX)/2,b.maxX-.01])for(const z of [b.minZ+.01,(b.minZ+b.maxZ)/2,b.maxZ-.01]){const hit=system.placement.supportAt(x,z,GROUND_TOP+.01,'__paving__');if(!hit?.object||hit.id!=='outdoor')return fail('铺装需要落在室外地面上')}
     return true;
   }
-  function addPaving(point,family='tiles'){
+  function addPaving(point,family='tiles'){if(system.canAdd&&!system.canAdd())return fail('场景最多摆放 200 件物件，请先删除一些物件');
     if(state.pavings.length>=64)return fail('最多可摆放 64 块铺装');
     const r={id:next('paving'),type:'paving',x:snap(point.x),z:snap(point.z),width:4,depth:3,family,style:family==='garden'?'grass':'stone'};
     if(!validPaving(r))return false;state.pavings.push(r);redraw();return r.id;
@@ -130,7 +132,7 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
     for(const {f,position,angle}of furniture){const x=position.x-r.x,z=position.z-r.z;f.root.position.set(r.x+z,position.y,r.z-x);f.root.rotation.y=angle+Math.PI/2;f.root.updateMatrixWorld(true)}
     for(const d of state.decorations.filter(d=>d.roomId===id)){[d.u,d.v]=[d.v,-d.u]}redraw();return true;
   }
-  function addWall(roomId,edge){const r=room(roomId);if(!r)return fail('先添加一块房间地基');const side=edge==='left'||edge==='right',sign=edge==='left'||edge==='back'?-1:1;
+  function addWall(roomId,edge){if(system.canAdd&&!system.canAdd())return fail('场景最多摆放 200 件物件，请先删除一些物件');const r=room(roomId);if(!r)return fail('先添加一块房间地基');const side=edge==='left'||edge==='right',sign=edge==='left'||edge==='back'?-1:1;
     const w={id:next('wall'),type:'wall',rooms:[roomId],x:r.x+(side?sign*(r.width/2-.1):0),z:r.z+(!side?sign*(r.depth/2-.1):0),angle:side?Math.PI/2:0,width:(side?r.depth:r.width),color:'#eee1cb',style:'plaster'};
     const same=state.walls.find(a=>Math.abs(a.angle-w.angle)<.01&&Math.abs(a.x-w.x)<.21&&Math.abs(a.z-w.z)<.21&&Math.abs(a.width-w.width)<.21&&room(a.rooms[0])?.level===r.level);
     if(same){if(!same.rooms.includes(roomId)){same.rooms.push(roomId);same.x=(same.x+w.x)/2;same.z=(same.z+w.z)/2}redraw();return same.id}
@@ -141,7 +143,7 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
     if(state.doors.some(d=>d.wallId===id&&(Math.abs(d.offset)+d.width/2+.1>candidate.width/2)))return fail('先移动门洞，再缩短墙壁');
     Object.assign(w,candidate);if(w.supportId){const proxy=wallProxy(w);proxy.dynamic=true;proxy.data=w;system.architecture.stacking.bind(proxy,system.get(w.supportId))}redraw();return true;
   }
-  function addStackedWall(baseId){
+  function addStackedWall(baseId){if(system.canAdd&&!system.canAdd())return fail('场景最多摆放 200 件物件，请先删除一些物件');
     const base=system.get(baseId);if(base?.kind!=='wall'||!base.root.visible)return fail('请选择墙顶');
     const owners=base.dynamic?base.data.rooms:wallOwners(base).map(r=>r.id);if(!owners.length)return fail('下方墙壁需要地基支撑');
     const w={id:next('wall'),type:'wall',rooms:[...owners],x:base.root.position.x,z:base.root.position.z,angle:0,width:Math.min(3,base.localBounds.getSize(new THREE.Vector3())[base.lengthAxis]*base.root.scale[base.lengthAxis]),color:'#eee1cb',style:'plaster'};
@@ -155,11 +157,11 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
   }
   function setHeight(value){value=THREE.MathUtils.clamp(snap(value),2.4,6);if(state.doors.some(d=>d.height+.15>value)||state.walls.some(w=>system.architecture.minimumHeight(w.id)>value))return fail('墙高不能小于门洞或墙饰高度');const delta=value-state.height;for(const r of state.rooms.filter(r=>r.level===2&&r.elevation===undefined))for(const f of [...roomWalls(r.id),...furnitureIn(r)])f.root.position.y+=delta;state.height=value;redraw();return true}
   function validDoor(d){const w=wall(d.wallId);return w&&[d.width,d.height,d.offset].every(Number.isFinite)&&d.width>=.75&&d.width<=3&&d.height>=1.8&&d.height<=state.height-.15&&Math.abs(d.offset)+d.width/2+.1<=w.width/2&&!state.doors.some(v=>v.id!==d.id&&v.wallId===d.wallId&&Math.abs(v.offset-d.offset)<(v.width+d.width)/2+.15)}
-  function addDoor(wallId,offset=0){const d={id:next('door'),type:'door',wallId,offset:snap(offset),width:.9,height:2.1,color:'#96734e',open:true};if(!validDoor(d))return fail('门洞需要留在墙内，并与其它门洞错开');state.doors.push(d);redraw();return d.id}
+  function addDoor(wallId,offset=0){if(system.canAdd&&!system.canAdd())return fail('场景最多摆放 200 件物件，请先删除一些物件');const d={id:next('door'),type:'door',wallId,offset:snap(offset),width:.9,height:2.1,color:'#96734e',open:true};if(!validDoor(d))return fail('门洞需要留在墙内，并与其它门洞错开');state.doors.push(d);redraw();return d.id}
   function updateDoor(id,patch){const d=door(id);if(!d)return false;const candidate={...d,...patch};if(!validDoor(candidate))return fail('门洞尺寸或位置超出可用墙面');Object.assign(d,candidate);redraw();return true}
-  function setRoof(id,style){const r=room(id);if(!r)return fail('先选择房间地基');if(state.rooms.some(v=>v.level>r.level&&overlap(boxOf(v),boxOf(r))))return fail('这块房间上方已有二楼，请选择顶层房间');r.roof={style,rise:r.roof?.rise||1.25,color:r.roof?.color||'#58746d'};redraw();return true}
+  function setRoof(id,style){const r=room(id);if(r&&!r.roof&&system.canAdd&&!system.canAdd())return fail('场景最多摆放 200 件物件');if(!r)return fail('先选择房间地基');if(state.rooms.some(v=>v.level>r.level&&overlap(boxOf(v),boxOf(r))))return fail('这块房间上方已有二楼，请选择顶层房间');r.roof={style,rise:r.roof?.rise||1.25,color:r.roof?.color||'#58746d'};redraw();return true}
   function roofY(r,x,z){return height(r)+state.height+.12+(r.roof?.style==='gable'?r.roof.rise*Math.max(0,1-Math.abs(z-r.z)/(r.depth/2+.25)):0)}
-  function addDecoration(id,x=0,z=0){const r=room(id);if(!r?.roof)return fail('先为房间添加屋顶');const d={id:next('chimney'),type:'chimney',roomId:id,u:THREE.MathUtils.clamp(x,-.8,.8),v:THREE.MathUtils.clamp(z,-.8,.8),color:'#be9680'};state.decorations.push(d);redraw();return d.id}
+  function addDecoration(id,x=0,z=0){if(system.canAdd&&!system.canAdd())return fail('场景最多摆放 200 件物件，请先删除一些物件');const r=room(id);if(!r?.roof)return fail('先为房间添加屋顶');const d={id:next('chimney'),type:'chimney',roomId:id,u:THREE.MathUtils.clamp(x,-.8,.8),v:THREE.MathUtils.clamp(z,-.8,.8),color:'#be9680'};state.decorations.push(d);redraw();return d.id}
   function removalContents(id){
     const selected=room(id);if(!selected)return null;
     const rooms=[selected];
@@ -219,7 +221,7 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
   function clear(){for(const id of dynamicFloors)if(!room(id))floorSystem.removeRoom(id);dynamicFloors.clear();root.traverse(o=>{if(o.isMesh){o.geometry.dispose();if(o.isInstancedMesh)o.dispose()}});root.clear();models.clear();wallRecords.clear();for(const m of ownedMaterials){if(m.userData.ownedTexture)m.map?.dispose();m.dispose()}ownedMaterials.clear()}
   function redraw(){
     clear();
-    ground.update(state.rooms,state.grounds);
+    ground.update(state.rooms,state.grounds,!state.customGround);
     // Ground is rendered only by the union mesh. These anchors identify each
     // editable plot without introducing overlapping transparent picking slabs.
     for(const r of state.grounds){const g=group(r.id,'ground');g.position.set(r.x,GROUND_TOP,r.z)}
@@ -256,7 +258,7 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
     const empty={version:1,height:3,rooms:[],grounds:[],pavings:[],walls:[],doors:[],decorations:[]};
     if(!saved||saved.version!==1||!Array.isArray(saved.rooms)||saved.rooms.length>16)saved={...empty,rooms:clone(defaults),componentDefaults:1};
     else if(defaults.length&&!saved.componentDefaults)saved={...saved,rooms:[...clone(defaults),...saved.rooms.filter(r=>!defaults.some(d=>d.id===r.id))]};
-    state=empty;state.height=THREE.MathUtils.clamp(Number(saved.height)||3,2.4,6);
+    state=empty;state.customGround=!!saved.customGround;state.height=THREE.MathUtils.clamp(Number(saved.height)||3,2.4,6);
     const ids=new Set();const safe=v=>v&&/^build-[a-z]+-\d+$/.test(v.id)&&!ids.has(v.id)&&ids.add(v.id);
     for(const item of (Array.isArray(saved.grounds)?saved.grounds:[]).slice(0,32))if(safe(item)&&item.type==='ground'&&validGround(item))state.grounds.push({id:item.id,type:'ground',x:item.x,z:item.z,width:item.width,depth:item.depth});
     for(const item of [...saved.rooms].sort((a,b)=>a.level-b.level)){if(!safe(item))continue;const r=clone(item);r.width=Math.min(r.width,20);r.depth=Math.min(r.depth,20);if(r.elevation!==undefined&&(!Number.isFinite(r.elevation)||r.elevation<.14||r.elevation>12))delete r.elevation;r.floorRotation=((Math.round((Number(r.floorRotation)||0)/90)*90)%360+360)%360;if(![1,2].includes(r.level)||!validateRoom(r))continue;if(r.roof&&!['flat','gable'].includes(r.roof.style))r.roof=null;if(r.roof)r.roof.rise=THREE.MathUtils.clamp(Number(r.roof.rise)||1.25,.25,4);state.rooms.push(r)}
@@ -269,6 +271,7 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
       if(!safe(item)||!outdoorStyles.some(s=>s.id===item.style&&s.family===item.family)||![item.x,item.z,item.width,item.depth].every(Number.isFinite)||item.width<1||item.depth<1||item.width>20||item.depth>20||Math.abs(item.x)>65||Math.abs(item.z)>65)continue;
       state.pavings.push({...clone(item),type:'paving'});
     }
+    state=limitLayout({items:[],building:state}).building;state.doors=state.doors.filter(d=>state.walls.some(w=>w.id===d.wallId));
     redraw();
   }
   function applyView(camera,selectedId){const level=view==='1'?1:view==='2'?2:Infinity,insideView=Number.isFinite(level);

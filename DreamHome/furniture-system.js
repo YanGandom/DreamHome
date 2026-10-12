@@ -1,3 +1,4 @@
+import {OBJECT_LIMIT,constructionCount,limitLayout} from './game-rules.js';
 import {WOOD_FINISHES,applyWoodFinish,rebuildRailing} from './railing-system.js';
 import * as THREE from './vendor/three.module.js';
 import {SURFACE_GAP} from './placement.js';
@@ -47,6 +48,7 @@ export function createFurnitureSystem({scene,specs,mergeGeometries,floorSystem=n
     const record={id:spec.id,sourceId:spec.id,name:spec.name,category:spec.category,catalogId:spec.catalogId||spec.id,catalogName:spec.catalogName||spec.name,root,paint,surface,localBounds,color:null,exists:true,initial:anchor.clone(),initialRotation:0,kind:spec.kind||'furniture',lengthAxis:spec.lengthAxis,wallTop:spec.wallTop,mountWallId:spec.mountWallId,mount:null,wallMaterial:null};
     record.woodFinish=spec.category==='stairs';record.railing=spec.id==='balcony-railing';if(record.railing){record.lengthAxis='x';record.railingHeight=localBounds.max.y;record.defaultRailingWidth=localBounds.max.x-localBounds.min.x;rebuildRailing(record,record.defaultRailingWidth)}if(record.woodFinish)applyWoodFinish(record,null);
     records.set(record.id,record);
+    if(record.railing)record.category='railings';
     record.collisionBounds=collisionBounds;
     record.interiorSign=spec.interiorSign||1;
     const templateRoot=root.clone(true);cloneMaterials(templateRoot);
@@ -63,10 +65,23 @@ export function createFurnitureSystem({scene,specs,mergeGeometries,floorSystem=n
     catalogGroups.get(template.catalogId).searchNames.push(template.name);
   }
   const catalog=()=>[...catalogGroups.values()];
+  function addRewardSuites(){
+    if(templates.has('suite-1'))return;
+    const seats=catalog().filter(r=>r.category==='seating'&&r.kind==='furniture'),extras=catalog().filter(r=>['tables','plants','lighting','rugs'].includes(r.category)&&r.kind==='furniture');
+    for(let i=0;i<26;i++){
+      const a=seats[i%seats.length],b=extras[Math.floor(i/seats.length)%extras.length],id='suite-'+(i+1),root=new THREE.Group(),paint=[];
+      const wa=a.localBounds.getSize(new THREE.Vector3()).x,wb=b.localBounds.getSize(new THREE.Vector3()).x;
+      for(const [r,x] of [[a,-(wb+.3)/2],[b,(wa+.3)/2]]){const part=r.root.clone(true);cloneMaterials(part);part.position.set(b.category==='rugs'?0:x,b.category==='rugs'&&r===a?b.localBounds.max.y+.01:0,0);root.add(part);part.traverse(o=>{o.userData.furnitureId=id;if(o.isMesh&&o.material.userData.editablePaint)paint.push(o.material)})}
+      root.updateMatrixWorld(true);const localBounds=new THREE.Box3().setFromObject(root),name=a.name+' · '+b.name+'组合';
+      const record={...a,id,sourceId:id,catalogId:id,catalogName:name,name,root,paint,localBounds,initial:new THREE.Vector3(),mount:null,color:null,exists:true};root.userData.furnitureId=id;templates.set(id,record);catalogGroups.set(id,record);
+    }
+  }
 
+  function objectCount(){return all().filter(r=>r.root.visible).length+constructionCount(construction?.state)+(scatter?.size||0)}
+  function canAdd(count=1){return objectCount()+count<=OBJECT_LIMIT}
   function all(){return [...records.values()].filter(r=>r.exists)}
   function get(id){const r=records.get(id);return r?.exists?r:construction?.getWall(id)||scatter?.get(id)||null}
-  function serialize(){return {version:1,surfaceGap:SURFACE_GAP,items:all().map(r=>({id:r.id,sourceId:r.sourceId,position:r.root.position.toArray(),rotation:r.root.rotation.y,color:r.color,visible:r.root.visible,surface:r.surface,...(r.kind==='wall'?{lengthScale:r.root.scale[r.lengthAxis],heightScale:r.root.scale.y,wallMaterial:r.wallMaterial}:{}),...(r.railing?{railingWidth:r.railingWidth}:{}),...(r.mount?{mount:structuredClone(r.mount)}:{})})),...(floorSystem?{floors:floorSystem.serialize()}:{}),...(construction?{building:construction.serialize()}:{}),...(scatter?{scatter:scatter.serialize()}:{})}}
+  function serialize(){return {version:1,surfaceGap:SURFACE_GAP,items:all().map(r=>({id:r.id,sourceId:r.sourceId,position:r.root.position.toArray(),rotation:r.root.rotation.y,color:r.color,visible:r.root.visible,surface:r.surface,...(r.kind==='wall'?{lengthScale:r.root.scale[r.lengthAxis],heightScale:r.root.scale.y,wallMaterial:r.wallMaterial}:{}),...(r.sourceId==='stair-entrance'?{entranceFinishVersion:1}:{}),...(r.railing?{railingWidth:r.railingWidth}:{}),...(r.mount?{mount:structuredClone(r.mount)}:{})})),...(floorSystem?{floors:floorSystem.serialize()}:{}),...(construction?{building:construction.serialize()}:{}),...(scatter?{scatter:scatter.serialize()}:{})}}
   function createCopy(sourceId,id){
     const template=templates.get(sourceId);if(!template)return null;
     const root=template.root.clone(true);cloneMaterials(root);root.userData.furnitureId=id;
@@ -79,17 +94,18 @@ export function createFurnitureSystem({scene,specs,mergeGeometries,floorSystem=n
   function floorPreview(id,styleId){if(!floorSystem?.set(id,styleId))return false;const r=construction?.room(id);if(r)r.floorStyle=styleId;ensureClearance();emit('preview');return true}
   function restoreState(state){
     if(state?.version!==1||!Array.isArray(state.items)||state.items.length>600)return false;
+    state=limitLayout(state);
     const valid=state.items.filter(v=>v&&typeof v.id==='string'&&/^[a-z0-9-]+$/.test(v.id)&&templates.has(v.sourceId)&&Array.isArray(v.position)&&v.position.length===3&&v.position.every(Number.isFinite)&&Number.isFinite(v.rotation)&&(v.color===null||/^#[0-9a-f]{6}$/i.test(v.color)));
     if(!valid.length)return false;
     for(const record of records.values()){record.exists=false;record.root.visible=false}
     for(const item of valid){
       const r=records.get(item.id)||createCopy(item.sourceId,item.id);if(!r)continue;
-      r.exists=true;r.root.visible=item.visible!==false;r.root.position.fromArray(item.position);r.root.rotation.y=item.rotation;r.root.userData.placementInvalid=false;applyColor(r,item.color);if(r.railing)rebuildRailing(r,Number.isFinite(item.railingWidth)?item.railingWidth:r.defaultRailingWidth);
+      r.exists=true;r.root.visible=item.visible!==false;r.root.position.fromArray(item.position);r.root.rotation.y=item.rotation;r.root.userData.placementInvalid=false;applyColor(r,item.id==='stair-entrance'&&!item.entranceFinishVersion&&item.color==='#60402e'?null:item.color);if(r.railing)rebuildRailing(r,Number.isFinite(item.railingWidth)?item.railingWidth:r.defaultRailingWidth);
       if(r.kind==='wall'){const size=r.localBounds.getSize(new THREE.Vector3());r.root.scale[r.lengthAxis]=Number.isFinite(item.lengthScale)?THREE.MathUtils.clamp(item.lengthScale,1/size[r.lengthAxis],24/size[r.lengthAxis]):1;r.root.scale.y=Number.isFinite(item.heightScale)?THREE.MathUtils.clamp(item.heightScale,.6/size.y,6/size.y):Math.min(1,6/size.y);architecture?.setMaterial(r,item.wallMaterial||null)}
       r.mount=item.mount&&typeof item.mount.wallId==='string'&&Array.isArray(item.mount.local)&&item.mount.local.length===3&&item.mount.local.every(Number.isFinite)&&Number.isFinite(item.mount.rotation)?structuredClone(item.mount):null;
       r.surface=['outdoor','foundation','floor-1','floor-2','wall-top','other'].includes(item.surface)?item.surface:(r.root.position.y>3?'floor-2':r.root.position.y<.7?'outdoor':'floor-1');
     }
-    construction?.load(state.building);floorSystem?.load(state.floors);for(const r of construction?.all()||[])r.floorStyle=floorSystem.get(r.id)?.styleId||r.floorStyle;scene.updateMatrixWorld(true);architecture?.sync();if(state.surfaceGap!==SURFACE_GAP)ensureClearance();scatter?.load(state.scatter);emit('restore');return true;
+    construction?.load(state.building);floorSystem?.load(state.floors);for(const r of construction?.all()||[])r.floorStyle=floorSystem.get(r.id)?.styleId||r.floorStyle;scene.updateMatrixWorld(true);architecture?.sync();if(state.surfaceGap!==SURFACE_GAP)ensureClearance();const budget=Math.max(0,OBJECT_LIMIT-constructionCount(construction?.state));all().filter(r=>r.root.visible).slice(budget).forEach(r=>r.root.visible=false);const available=Math.max(0,budget-all().filter(r=>r.root.visible).length);scatter?.load(Array.isArray(state.scatter)?state.scatter.slice(0,available):[]);emit('restore');return true;
   }
   // Original objects are always serialized, including stored ones. A missing
   // original in a saved layout therefore belongs to a newly editable catalog.
@@ -98,7 +114,7 @@ export function createFurnitureSystem({scene,specs,mergeGeometries,floorSystem=n
     const ids=new Set(state.items.map(item=>item?.id)),additions=initialState.items.filter(item=>!ids.has(item.id));
     return restoreState({...state,items:[...state.items,...additions]});
   }
-  function saveHistory(before){if(JSON.stringify(before)===JSON.stringify(serialize()))return false;undoStack.push(before);if(undoStack.length>40)undoStack.shift();redoStack.length=0;emit('commit');return true}
+  function saveHistory(before){if(JSON.stringify(before)===JSON.stringify(serialize()))return false;undoStack.push(before);if(undoStack.length>40)undoStack.shift();redoStack.length=0;emit('action');emit('commit');return true}
   function transaction(change){if(gesture)commitGesture();const before=serialize();const result=change();saveHistory(before);return result}
   function constrain(record,x,z){return placement&&!placement.valid(record,x,record.root.position.y,z)?[record.root.position.x,record.root.position.z]:[x,z]}
   function movePreview(id,x,z,y,allowInvalid=false,wallId,faceSign){
@@ -159,11 +175,11 @@ export function createFurnitureSystem({scene,specs,mergeGeometries,floorSystem=n
   function rotate(id,degrees){const r=get(id);if(r)transaction(()=>rotationPreview(id,THREE.MathUtils.radToDeg(r.root.rotation.y)+degrees))}
   function move(id,x,z,y){transaction(()=>movePreview(id,x,z,y))}
   function remove(id){if(scatter?.get(id)){transaction(()=>scatter.remove(id));return}const r=get(id);if(r)transaction(()=>{if(r.kind==='wall')construction?.removeStackedOn(id);r.root.visible=false;if(r.kind==='wall')for(const f of all())if(f.mount?.wallId===id)f.root.visible=false;architecture?.sync()})}
-  function restore(id){const r=get(id);if(r)transaction(()=>{r.root.visible=true;architecture?.sync()})}
-  function newCopy(sourceId){if(all().length>=500)return null;let id;do{id='copy-'+(++serial)}while(records.has(id));const r=createCopy(sourceId,id);if(r?.kind==='wall')r.root.scale[r.lengthAxis]=3/r.localBounds.getSize(new THREE.Vector3())[r.lengthAxis];return r}
+  function restore(id){const r=get(id);if(r&&!r.root.visible&&!canAdd())return false;if(r)transaction(()=>{r.root.visible=true;architecture?.sync()})}
+  function newCopy(sourceId){if(!canAdd()||all().length>=500)return null;let id;do{id='copy-'+(++serial)}while(records.has(id));const r=createCopy(sourceId,id);if(r?.kind==='wall')r.root.scale[r.lengthAxis]=3/r.localBounds.getSize(new THREE.Vector3())[r.lengthAxis];return r}
   function add(sourceId,near){return transaction(()=>{const r=newCopy(sourceId);if(!r)return null;if(near)movePreview(r.id,near.x,near.z,near.y);else movePreview(r.id,r.initial.x+.40,r.initial.z+.35);return r})}
   function beginPlacement(id,kind){
-    beginGesture();const r=kind==='catalog'?newCopy(id):get(id);
+    beginGesture();const existing=get(id);const r=kind==='catalog'?newCopy(id):existing?.root.visible||canAdd()?existing:null;
     if(!r){cancelGesture();return null}r.root.visible=true;emit('preview');return r;
   }
   function cancelPlacement(id,created){
@@ -173,7 +189,7 @@ export function createFurnitureSystem({scene,specs,mergeGeometries,floorSystem=n
   function resetLayout(){transaction(()=>restoreState(initialState))}
   function undo(){if(gesture)cancelGesture();if(!undoStack.length)return;redoStack.push(serialize());restoreState(undoStack.pop());emit('commit')}
   function redo(){if(!redoStack.length)return;undoStack.push(serialize());restoreState(redoStack.pop());emit('commit')}
-  return {resizeRailingPreview,rebuildRailing,all,get,templates,catalog,floorSystem,floorPreview,lengthPreview,resizeWallPreview,materialPreview,serialize,load:restoreState,loadSaved,subscribe:fn=>{listeners.add(fn);return()=>listeners.delete(fn)},setColor,colorPreview,rotate,move,movePreview,rotationPreview,remove,restore,add,resetItem,resetLayout,undo,redo,beginGesture,commitGesture,cancelGesture,constrain,beginPlacement,cancelPlacement,setPlacement:value=>{placement=value;ensureClearance();for(const r of all()){r.initial.copy(r.root.position);const t=templates.get(r.id);if(t){t.root.position.copy(r.root.position);t.mount=r.mount?structuredClone(r.mount):null}}initialState=serialize()},get placement(){return placement},setArchitecture:value=>{architecture=value;initialState=serialize()},get architecture(){return architecture},
+  return {addRewardSuites,initialLayout:()=>structuredClone(initialState),objectCount,canAdd,objectLimit:OBJECT_LIMIT,clearHistory:()=>{gesture=null;undoStack.length=0;redoStack.length=0;emit('restore')},resizeRailingPreview,rebuildRailing,all,get,templates,catalog,floorSystem,floorPreview,lengthPreview,resizeWallPreview,materialPreview,serialize,load:restoreState,loadSaved,subscribe:fn=>{listeners.add(fn);return()=>listeners.delete(fn)},setColor,colorPreview,rotate,move,movePreview,rotationPreview,remove,restore,add,resetItem,resetLayout,undo,redo,beginGesture,commitGesture,cancelGesture,constrain,beginPlacement,cancelPlacement,setPlacement:value=>{placement=value;ensureClearance();for(const r of all()){r.initial.copy(r.root.position);const t=templates.get(r.id);if(t){t.root.position.copy(r.root.position);t.mount=r.mount?structuredClone(r.mount):null}}initialState=serialize()},get placement(){return placement},setArchitecture:value=>{architecture=value;initialState=serialize()},get architecture(){return architecture},
     setConstruction:value=>{construction=value;initialState=serialize()},get construction(){return construction},setScatter:value=>{scatter=value;initialState=serialize()},get scatter(){return scatter},transaction,notify:()=>emit('preview'),
     get canUndo(){return undoStack.length>0},get canRedo(){return redoStack.length>0},get gesturing(){return!!gesture},get historyLength(){return undoStack.length}};
 }

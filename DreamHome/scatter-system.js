@@ -64,7 +64,7 @@ export function createScatterSystem({scene,system}){
     const minX=Math.ceil((point.x-SCATTER_RADIUS)/SCATTER_CELL),maxX=Math.floor((point.x+SCATTER_RADIUS)/SCATTER_CELL),minZ=Math.ceil((point.z-SCATTER_RADIUS)/SCATTER_CELL),maxZ=Math.floor((point.z+SCATTER_RADIUS)/SCATTER_CELL);
     for(let x=minX;x<=maxX;x++)for(let z=minZ;z<=maxZ;z++){
       if(Math.hypot(x*SCATTER_CELL-point.x,z*SCATTER_CELL-point.z)>SCATTER_RADIUS)continue;
-      const old=[...cells.values()].find(c=>c.type===type&&Math.abs(c.x*SCATTER_CELL+(c.dx||0)-x*SCATTER_CELL)<.001&&Math.abs(c.z*SCATTER_CELL+(c.dz||0)-z*SCATTER_CELL)<.001);const key=old?old.patch+':'+keyOf(type,old.x,old.z):null;if(!old&&cells.size>=SCATTER_MAX_CELLS)continue;
+      const old=[...cells.values()].find(c=>c.type===type&&Math.abs(c.x*SCATTER_CELL+(c.dx||0)-x*SCATTER_CELL)<.001&&Math.abs(c.z*SCATTER_CELL+(c.dz||0)-z*SCATTER_CELL)<.001);const key=old?old.patch+':'+keyOf(type,old.x,old.z):null;if(!old&&(cells.size>=SCATTER_MAX_CELLS||system.canAdd&&!system.canAdd()))continue;
       const amount=Math.min(2.1,(old?.amount||0)+seconds);if(old?.amount===amount||support(x,z,footprint(type,amount))===null)continue;
       if(scatterLevel(old?.amount)!==scatterLevel(amount))dirty.add(type);
       activePatch??=nextPatch();const cell=old?{...old,amount}:{type,x,z,amount,patch:activePatch,dx:0,dz:0};cells.set(key||cell.patch+':'+keyOf(type,x,z),cell);changed=true;
@@ -117,5 +117,5 @@ export function createScatterSystem({scene,system}){
   }
   function levelAt(type,point){return Math.max(0,...[...cells.values()].filter(c=>c.type===type&&Math.abs(c.x*SCATTER_CELL+c.dx-point.x)<=SCATTER_CELL/2&&Math.abs(c.z*SCATTER_CELL+c.dz-point.z)<=SCATTER_CELL/2).map(c=>scatterLevel(c.amount)))}
   system.subscribe(type=>{if(type==='commit')refresh()});
-  return{root,catalog,beginStroke,endStroke,get:id=>records.get(id)||null,resolveHit,move,remove,pick,paint,stroke,flush,refresh,serialize,load,levelAt,get full(){return cells.size>=SCATTER_MAX_CELLS},get size(){return cells.size}};
+  return{root,catalog,beginStroke,endStroke,get:id=>records.get(id)||null,resolveHit,move,remove,pick,paint,stroke,flush,refresh,serialize,load,levelAt,get full(){return cells.size>=SCATTER_MAX_CELLS||system.canAdd&&!system.canAdd()},get size(){return cells.size}};
 }

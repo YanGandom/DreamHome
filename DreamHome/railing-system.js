@@ -6,7 +6,12 @@ export const WOOD_FINISHES=[
   {name:'白色',color:'#f4f1e8',body:'#dfdcd1',tread:'#c8a77b'}
 ];
 const ownedResources=new WeakMap();
+export const ENTRANCE_FINISH={name:'酒红与奶油色（原配色）',color:'#902e42'};
+export const woodFinishesFor=record=>record?.sourceId==='stair-entrance'?[...WOOD_FINISHES,ENTRANCE_FINISH]:WOOD_FINISHES;
 export function applyWoodFinish(record,color){
+  if(record.sourceId==='stair-entrance'&&(color===null||color===ENTRANCE_FINISH.color)){
+    record.color=ENTRANCE_FINISH.color;record.root.traverse(o=>{if(o.isMesh)o.material.color.set(o.material.userData.baseColor)});return;
+  }
   const finish=WOOD_FINISHES.find(f=>f.color===color)||WOOD_FINISHES[0];
   record.color=finish.color;
   record.root.traverse(o=>{if(o.isMesh){const role=o.material.userData.woodRole||'rail';o.material.color.set(role==='body'?finish.body:role==='tread'?finish.tread:finish.color)}});

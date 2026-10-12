@@ -46,15 +46,15 @@ export function createFoundationGround({parent,layers=[]}){
   const originals=layers.map(({mesh,bounds})=>({mesh,parent:mesh.parent,bounds}));
   const definitions=originals.length?originals.map((v,i)=>({material:v.mesh.material,bounds:v.bounds,margin:i===0?GROUND_MARGIN-.1:GROUND_MARGIN})):[];
   let signature='';
-  function update(rooms,plots=[]){
-    const bases=rooms.filter(r=>r.level===1),next=JSON.stringify([bases,plots].map(list=>list.map(r=>[r.x,r.z,r.width,r.depth])));if(next===signature)return;signature=next;
+  function update(rooms,plots=[],includeOriginal=true){
+    const bases=rooms.filter(r=>r.level===1),next=JSON.stringify([includeOriginal,[bases,plots].map(list=>list.map(r=>[r.x,r.z,r.width,r.depth]))]);if(next===signature)return;signature=next;
     for(const mesh of root.children)mesh.geometry.dispose();root.clear();
-    if(!bases.length&&!plots.length){for(const v of originals)if(!v.mesh.parent)v.parent.add(v.mesh);return}
+    if(includeOriginal&&!bases.length&&!plots.length){for(const v of originals)if(!v.mesh.parent)v.parent.add(v.mesh);return}
     for(const v of originals)v.mesh.removeFromParent();
     for(const layer of definitions){
       const b=layer.bounds,rectangle=(r,margin)=>({minX:r.x-r.width/2-margin,maxX:r.x+r.width/2+margin,minZ:r.z-r.depth/2-margin,maxZ:r.z+r.depth/2+margin});
-      const rectangles=[{minX:b.min.x,maxX:b.max.x,minZ:b.min.z,maxZ:b.max.z},...bases.map(r=>rectangle(r,layer.margin)),...plots.map(r=>rectangle(r,layer.margin-GROUND_MARGIN))];
-      const mesh=new THREE.Mesh(groundUnionGeometry(rectangles,b.min.y,b.max.y),layer.material);mesh.name='ContinuousGroundLayer';mesh.userData.surfaceId='outdoor';mesh.castShadow=mesh.receiveShadow=true;root.add(mesh);
+      const rectangles=[...(includeOriginal?[{minX:b.min.x,maxX:b.max.x,minZ:b.min.z,maxZ:b.max.z}]:[]),...bases.map(r=>rectangle(r,layer.margin)),...plots.map(r=>rectangle(r,layer.margin-GROUND_MARGIN))];
+      if(!rectangles.length)continue;const mesh=new THREE.Mesh(groundUnionGeometry(rectangles,b.min.y,b.max.y),layer.material);mesh.name='ContinuousGroundLayer';mesh.userData.surfaceId='outdoor';mesh.castShadow=mesh.receiveShadow=true;root.add(mesh);
     }
     root.updateMatrixWorld(true);
   }

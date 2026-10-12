@@ -7,7 +7,7 @@ const test=(name,fn)=>{s.load(initial);fn();cases.push(name)};
 test('every authored model is assigned to a catalog family and outdoor paving uses editable areas',()=>{
   assert.deepEqual(catalogAudit.unassigned,[]);for(const f of s.all())assert.ok(s.catalog().some(t=>t.catalogId===f.catalogId),f.id);
   assert.equal(s.all().filter(f=>f.category==='paving').length,0);assert.equal(b.state.pavings.length,3);
-  for(const [id,category]of [['stair-entrance','stairs'],['stair-left','stairs'],['balcony-railing','stairs'],['emerald-arch-door','doors'],['wall-8','walls']])assert.equal(s.get(id).category,category);
+  for(const [id,category]of [['stair-entrance','stairs'],['stair-left','stairs'],['balcony-railing','railings'],['emerald-arch-door','doors'],['wall-8','walls']])assert.equal(s.get(id).category,category);
   const id=b.state.pavings[0].id;b.remove(id);assert.equal(b.paving(id),undefined);const saved=s.serialize();s.loadSaved(saved);assert.deepEqual(s.serialize(),saved);
 });
 test('foundation maximum is 20m on either axis and wall segments never exceed 6m',()=>{

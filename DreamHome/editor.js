@@ -1,3 +1,4 @@
+import {decorateLock} from './progression.js';
 import {createObjectControls} from './object-controls.js';
 import * as THREE from './vendor/three.module.js';
 import {createGroundSelection} from './ground-selection.js';
@@ -5,16 +6,16 @@ import {createModelThumbnails} from './model-thumbnails.js';
 import {createBuildingControls} from './building-controls.js';
 import {createScatterControls} from './scatter-controls.js';
 
-const CATEGORIES={seating:'座椅',tables:'桌柜',lighting:'灯具',plants:'植物',rugs:'地毯',decor:'陈设',mounted:'墙饰',walls:'墙体',props:'道具',paving:'室外铺装',stairs:'楼梯护栏',doors:'门洞'};
+const CATEGORIES={seating:'座椅',tables:'桌柜',lighting:'灯具',plants:'植物',rugs:'地毯',decor:'陈设',mounted:'墙饰',walls:'墙体',props:'道具',paving:'室外铺装',railings:'护栏',stairs:'楼梯',doors:'门洞'};
 const BUILD_CATEGORIES={room:'foundation',upper:'floors',ground:'foundation',paving:'paving',garden:'paving',wall:'walls',door:'doors',flat:'roofs',gable:'roofs',chimney:'decor'};
 const STORAGE_KEY='winter-grand-layout-v1';
 export function createSceneEditor({scene,camera,renderer,controls,furnitureSystem:system,occluders=[],onInteract=()=>{},onResize=()=>{},onBuildingView=()=>{},toast=()=>{},thumbnailFactory=createModelThumbnails}){
   const $=id=>document.getElementById(id),ui={list:$('library-list'),status:$('save-status'),panel:$('editor-panel'),collapse:$('library-collapse-toggle')};
   let selectedId=null,selectedFloorId=null,editing=true,category='all',operation=null,libraryDrag=null,suppressClick=false,builder=null;
-  let libraryCollapsed=false,scatterControls=null;
+  let libraryCollapsed=false,scatterControls=null,storageKey=STORAGE_KEY;
   const thumbnails=thumbnailFactory(renderer),dragMarker=createGroundSelection(scene,'LibraryPlacement'),raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
   try{const saved=localStorage.getItem(STORAGE_KEY);if(saved){if(system.loadSaved(JSON.parse(saved)))ui.status.textContent='已恢复上次布局 · 本机';else ui.status.textContent='已使用初始布局'}}catch{ui.status.textContent='本次可编辑 · 本地保存不可用'}
-  function save(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(system.serialize()));ui.status.textContent='已自动保存 · 本机'}catch{ui.status.textContent='无法自动保存 · 请勿刷新'}}
+  function save(){try{localStorage.setItem(storageKey,JSON.stringify(system.serialize()));ui.status.textContent='已自动保存 · 本机'}catch{ui.status.textContent='无法自动保存 · 请勿刷新'}}
   function renderInspector(){
     const r=system.get(selectedId),floor=system.floorSystem?.get(selectedFloorId);
     $('undo-edit').disabled=!system.canUndo;$('redo-edit').disabled=!system.canRedo;
@@ -38,13 +39,21 @@ export function createSceneEditor({scene,camera,renderer,controls,furnitureSyste
     thumbnails.clearPending();
     // One entry per model family, including stored instances. Restoring an
     // instance reuses its identity, color and transform instead of making a copy.
-    const stored=new Map();for(const r of system.all())if(!r.root.visible&&!stored.has(r.catalogId))stored.set(r.catalogId,r);
-    const entries=[...system.catalog().map(template=>({key:template.id,record:stored.get(template.catalogId)||template,kind:stored.has(template.catalogId)?'removed':'catalog',category:template.category})),...(system.scatter?.catalog||[]).map(record=>({key:record.id,record,kind:'scatter',category:'props'})),...(builder?.catalog||[]).map(record=>({key:record.id,record,kind:'build',category:BUILD_CATEGORIES[record.tool]}))].filter(entry=>category==='all'||entry.category===category);
-    $('library-total').textContent=entries.length+' 款';ui.list.replaceChildren();
+    const stored=new Map();for(const r of system.all())if(!r.root.visible&&!(system.construction?.state.customGround&&r.id===r.sourceId)&&!stored.has(r.catalogId))stored.set(r.catalogId,r);
+    const entries=[...system.catalog().map(template=>({key:template.id,record:stored.get(template.catalogId)||template,kind:stored.has(template.catalogId)?'removed':'catalog',category:template.category})),...(system.scatter?.catalog||[]).map(record=>({key:record.id,record,kind:'scatter',category:'props'})),...(builder?.catalog||[]).map(record=>({key:record.id,record,kind:'build',category:BUILD_CATEGORIES[record.tool]}))].filter(entry=>category==='all'||entry.category===category).sort((a,b)=>{const order=['foundation','walls','railings','stairs','floors','doors','roofs','seating','tables','lighting','plants','rugs','mounted','paving','props','decor'];return order.indexOf(a.category)-order.indexOf(b.category)});
+    $('library-total').textContent=system.objectCount()+' / 200 件';ui.list.replaceChildren();
     if(!entries.length){const p=document.createElement('p');p.className='library-empty';p.textContent='这个分类暂时没有物件';ui.list.append(p);return}
     for(const {key,record:r,kind} of entries){
       const card=document.createElement('button');card.type='button';card.className='library-card';card.dataset.itemId=key;if(kind==='removed')card.dataset.restoreId=r.id;card.setAttribute('aria-label',(kind==='removed'?'恢复':'添加')+' '+r.name);
       const preview=document.createElement('img');preview.className='model-preview';preview.alt='';preview.draggable=false;preview.setAttribute('aria-hidden','true');card.append(preview);thumbnails.request(r,preview);
+      if(decorateLock(card,system.progression,key)){
+        let swipe=null,swiped=false;
+        card.addEventListener('pointerdown',e=>{if(e.button!==0||e.isPrimary===false)return;swiped=false;swipe={id:e.pointerId,x:e.clientX,scroll:ui.list.scrollLeft||0};card.setPointerCapture(e.pointerId)});
+        card.addEventListener('pointermove',e=>{if(swipe?.id!==e.pointerId)return;if(Math.abs(e.clientX-swipe.x)>7)swiped=true;if(swiped){e.preventDefault();ui.list.scrollLeft=swipe.scroll-(e.clientX-swipe.x)}});
+        const end=e=>{if(swipe?.id!==e.pointerId)return;swipe=null;if(card.hasPointerCapture(e.pointerId))card.releasePointerCapture(e.pointerId)};
+        card.addEventListener('pointerup',end);card.addEventListener('pointercancel',e=>{swiped=true;end(e)});card.addEventListener('lostpointercapture',()=>{swipe=null});
+        card.addEventListener('click',()=>{if(!swiped)system.progression.check(key)});ui.list.append(card);continue;
+      }
       if(r.scatterType){scatterControls.bindCard(card,r);ui.list.append(card);continue}
       if(kind==='build'){builder.bindCard(card,r);ui.list.append(card);continue}
       card.addEventListener('pointerdown',event=>{
@@ -56,8 +65,8 @@ export function createSceneEditor({scene,camera,renderer,controls,furnitureSyste
       card.addEventListener('click',()=>{
         if(suppressClick){suppressClick=false;return}
         builder?.close();interaction.close();
-        if(kind==='catalog'){const copy=system.add(r.sourceId);if(copy){select(copy.id);toast('已添加'+r.name+'，拖动摆放后点击绿色对勾')}else toast('已达到 500 件物件上限，可重置布局后继续')}
-        else if(kind==='removed'){system.restore(r.id);select(r.id);toast(r.name+'已恢复到收纳前的位置')}
+        if(kind==='catalog'){const custom=system.construction?.state.customGround,base=system.construction?.all()[0];if(custom&&r.kind==='mounted'&&!system.architecture.walls().length){toast('请先添加墙壁，再将墙饰拖到内侧墙面');return}const near=custom&&base?new THREE.Vector3(base.x,system.construction.height(base),base.z):undefined;const copy=system.add(r.sourceId,near);if(copy){select(copy.id);toast('已添加'+r.name+'，拖动摆放后点击绿色对勾')}else toast('已达到 200 件物件上限，请先删除一些物件')}
+        else if(kind==='removed'){if(!system.canAdd()){toast('场景最多摆放 200 件物件，请先删除一些物件');return}system.restore(r.id);select(r.id);toast(r.name+'已恢复到收纳前的位置')}
       });ui.list.append(card);
     }
   }
@@ -77,7 +86,7 @@ export function createSceneEditor({scene,camera,renderer,controls,furnitureSyste
     const rect=renderer.domElement.getBoundingClientRect(),inside=event.clientX>=rect.left&&event.clientX<rect.left+rect.width&&event.clientY>=rect.top&&event.clientY<rect.top+rect.height;
     state.valid=false;state.inside=inside;
     if(!inside){if(state.record)state.record.root.visible=false;dragMarker.update(null,false);return}
-    if(!state.record){state.record=system.beginPlacement(state.source,state.kind);if(!state.record){toast('已达到 500 件物件上限');finishLibraryDrag(false);return}}
+    if(!state.record){state.record=system.beginPlacement(state.source,state.kind);if(!state.record){toast('已达到 200 件物件上限');finishLibraryDrag(false);return}}
     state.record.root.visible=true;scene.updateMatrixWorld(true);camera.updateMatrixWorld();
     pointer.set((event.clientX-rect.left)/rect.width*2-1,1-(event.clientY-rect.top)/rect.height*2);raycaster.setFromCamera(pointer,camera);
     const point=system.placement?system.placement.pick(raycaster,state.record.id):raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-state.record.root.position.y),new THREE.Vector3());
@@ -110,5 +119,5 @@ export function createSceneEditor({scene,camera,renderer,controls,furnitureSyste
   ui.list.addEventListener('wheel',event=>{if(Math.abs(event.deltaY)>Math.abs(event.deltaX)){ui.list.scrollLeft+=event.deltaY;event.preventDefault()}},{passive:false});
   system.subscribe(type=>{renderInspector();if(type!=='preview')renderLibrary();if(type==='commit')save()});
   renderInspector();renderLibrary();
-  return{select,pick:interaction.pick,pickFloor:interaction.pickFloor,beginMode:interaction.beginMode,close:interaction.close,setEditing,setCategory,setLibraryCollapsed,builder,update:(now=performance.now())=>{interaction.update();builder?.update();scatterControls?.update(now);if(!libraryCollapsed&&!libraryDrag&&!builder?.dragging&&!scatterControls?.dragging)thumbnails.update()},get libraryCollapsed(){return libraryCollapsed},get selectedId(){return selectedId},get selectedFloorId(){return interaction.selectedFloorId},get mode(){return interaction.mode},get editing(){return editing},get dragging(){return!!libraryDrag?.moved||interaction.dragging||!!builder?.dragging||!!scatterControls?.dragging},storageKey:STORAGE_KEY};
+  return{refreshLibrary:renderLibrary,select,pick:interaction.pick,pickFloor:interaction.pickFloor,beginMode:interaction.beginMode,close:interaction.close,setEditing,setCategory,setLibraryCollapsed,builder,update:(now=performance.now())=>{interaction.update();builder?.update();scatterControls?.update(now);if(!libraryCollapsed&&!libraryDrag&&!builder?.dragging&&!scatterControls?.dragging)thumbnails.update()},get libraryCollapsed(){return libraryCollapsed},get selectedId(){return selectedId},get selectedFloorId(){return interaction.selectedFloorId},get mode(){return interaction.mode},get editing(){return editing},get dragging(){return!!libraryDrag?.moved||interaction.dragging||!!builder?.dragging||!!scatterControls?.dragging},setStorageKey:key=>{storageKey=key},get storageKey(){return storageKey}};
 }

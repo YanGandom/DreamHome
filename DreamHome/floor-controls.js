@@ -1,3 +1,4 @@
+import {decorateLock} from './progression.js';
 import * as THREE from './vendor/three.module.js';
 
 export function createFloorControls({camera,renderer,system,onInteract=()=>{},onSelection=()=>{}}){
@@ -5,7 +6,7 @@ export function createFloorControls({camera,renderer,system,onInteract=()=>{},on
   let selectedId=null,anchor=new THREE.Vector3();
   function render(){
     popup.hidden=!selectedId;
-    for(const button of options.children){const selected=floors.get(selectedId)?.styleId===button.dataset.floorStyle;button.classList.toggle('active',selected);button.setAttribute('aria-pressed',String(selected))}
+    for(const button of options.children){decorateLock(button,system.progression,button.dataset.floorStyle,true);const selected=floors.get(selectedId)?.styleId===button.dataset.floorStyle;button.classList.toggle('active',selected);button.setAttribute('aria-pressed',String(selected))}
     update();
   }
   function update(){

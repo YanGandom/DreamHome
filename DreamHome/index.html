@@ -8,9 +8,10 @@
   <link rel="stylesheet" href="./editor.css">
   <link rel="stylesheet" href="./object-controls.css?v=20261010-arc-frame-2">
   <link rel="stylesheet" href="./building.css">
+  <link rel="stylesheet" href="./game-flow.css">
   <script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/"}}</script>
 </head>
-<body class="editor-open">
+<body class="editor-open game-intro">
   <main id="scene" aria-label="筑梦小屋三维建造场景"></main>
   <header class="masthead"><div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M7 19 20 8l13 11v14H7Z"/><path d="M15 33V22h10v11M27 9v7"/></svg></div><div><h1>筑梦小屋</h1><p>A HOME OF YOUR OWN</p></div></header>
   <div class="top-actions">
@@ -23,6 +24,23 @@
     </div>
   </div>
   <button id="camera-view-toggle" class="camera-view-toggle" type="button" aria-label="切换到俯视" aria-pressed="false" title="切换到俯视"><span id="camera-top-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4Z M4 12h16 M12 4v16"/></svg></span><span id="camera-original-icon" aria-hidden="true" hidden><svg viewBox="0 0 24 24"><path d="m3 8 9-5 9 5v9l-9 5-9-5Z M3 8l9 5 9-5 M12 13v9"/></svg></span><span id="camera-view-label">俯视</span></button>
+  <button id="achievement-toggle" class="camera-view-toggle achievement-toggle" type="button" aria-label="成就与奖励">☆ 成就</button>
+  <section id="level-picker" class="progress-overlay" role="dialog" aria-modal="true" aria-labelledby="level-picker-title" hidden><div class="progress-sheet"><header><h2 id="level-picker-title">筑梦旅程 · 21 关</h2><button id="level-picker-close" aria-label="关闭关卡列表">×</button></header><p>逐关完成任务，每关解锁两件道具。自定义模式共享所有奖励。</p><div id="level-list" class="progress-grid"></div></div></section>
+  <section id="achievement-panel" class="progress-overlay" role="dialog" aria-modal="true" aria-labelledby="achievement-title" hidden><div class="progress-sheet"><header><h2 id="achievement-title">成就手册</h2><button id="achievement-close" aria-label="关闭成就手册">×</button></header><p>确认操作后累计进度，颜色与花纹达标自动解锁。相同物件的同一种操作结果只计一次。</p><div id="achievement-list" class="progress-grid"></div></div></section>
+  <section id="reward-notice" class="progress-overlay reward-notice" role="alertdialog" aria-modal="true" aria-labelledby="reward-notice-text" hidden><div class="progress-sheet"><p id="reward-notice-text"></p><button id="reward-notice-close" type="button">知道了</button></div></section>
+  <button id="task-toggle" class="camera-view-toggle task-toggle" type="button" aria-label="第一关任务" aria-expanded="false" aria-controls="task-panel" hidden><span aria-hidden="true">☷</span><span>任务 <b id="task-count">0/3</b></span></button>
+  <button id="mode-switch" class="mode-switch" type="button" aria-label="选择玩法">玩法</button>
+  <section id="task-panel" class="task-panel" aria-labelledby="task-title" hidden>
+    <div class="task-heading"><div><p id="task-chapter">CHAPTER 01</p><h2 id="task-title">小屋焕新</h2></div><button id="task-close" aria-label="关闭任务">×</button></div>
+    <ol><li id="task-floor"><span class="task-check" aria-hidden="true"></span><div>更改地砖的配色和样式<small>选择另一款室内瓷砖或室外地砖材质</small></div></li><li id="task-sofa"><span class="task-check" aria-hidden="true"></span><div>新增一个沙发并旋转它<small>从座椅分类添加双人沙发，旋转后确认</small></div></li><li id="task-window"><span class="task-check" aria-hidden="true"></span><div>删除一个窗户<small>选中墙面的窗户，点击删除</small></div></li></ol>
+    <button id="next-level" type="button" hidden>选择下一关</button><p id="task-status" role="status">每一个小改变，都让这里更像你的家。</p>
+  </section>
+  <section id="game-entry" class="game-entry" aria-label="筑梦小屋入场页">
+    <div class="entry-logo"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M7 19 20 8l13 11v14H7Z M15 33V22h10v11 M27 9v7"/></svg><p>A HOME OF YOUR OWN</p><h1>筑梦小屋</h1><span>从一个小小的想法，到喜欢的家</span></div>
+    <div class="entry-bottom"><button id="dream-start" class="dream-start" type="button">筑 梦</button>
+      <section id="mode-panel" class="mode-panel" aria-labelledby="mode-title" hidden><p id="mode-title">今天，想怎样筑梦？</p><div class="mode-options"><button id="mode-level" type="button"><span class="mode-symbol" aria-hidden="true">⌂</span><strong>关卡模式</strong><small>第一关 · 小屋焕新</small></button><button id="mode-custom" type="button"><span class="mode-symbol" aria-hidden="true">＋</span><strong>自定义模式</strong><small>一块地基，无限灵感</small></button></div><button id="mode-back" type="button">返回</button></section>
+    </div>
+  </section>
   <div class="hint" id="scene-hint">轻点布置 · 拖动环绕 · 双指拖动平移 · 双指缩放</div>
   <section id="object-ui" class="object-ui" aria-label="家具操作" hidden>
     <div class="object-card">
@@ -61,7 +79,7 @@
   </dialog>
   <button id="library-collapse-toggle" class="library-collapse-toggle" type="button" aria-label="收起组件库" title="收起组件库" aria-controls="editor-panel" aria-expanded="true"><svg class="library-collapse-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg><svg class="library-expand-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h16v7a2 2 0 0 1-2 2h-3v7a3 3 0 0 1-6 0v-7H6a2 2 0 0 1-2-2ZM4 9h16M8 3v3m4-3v3m4-3v3M12 18v1"/></svg></button>
   <aside id="editor-panel" class="editor-panel" aria-label="组件库">
-    <div class="category-row"><div id="library-categories" class="category-chips" role="group" aria-label="组件分类"><button data-category="all" class="active" aria-pressed="true">全部</button><button data-category="props" aria-pressed="false">道具</button><button data-category="seating" aria-pressed="false">座椅</button><button data-category="tables" aria-pressed="false">桌柜</button><button data-category="lighting" aria-pressed="false">灯具</button><button data-category="plants" aria-pressed="false">植物</button><button data-category="rugs" aria-pressed="false">地毯</button><button data-category="decor" aria-pressed="false">陈设</button><button data-category="mounted" aria-pressed="false">墙饰</button><button data-category="paving" aria-pressed="false">室外铺装</button><button data-category="stairs" aria-pressed="false">楼梯护栏</button><button data-category="floors" aria-pressed="false">二层地板</button><button data-category="foundation" aria-pressed="false">地基</button><button data-category="walls" aria-pressed="false">墙体</button><button data-category="doors" aria-pressed="false">门洞</button><button data-category="roofs" aria-pressed="false">屋顶</button></div><div class="editor-toolbar"><button id="undo-edit" title="撤销 Ctrl+Z" aria-label="撤销" disabled>↶</button><button id="redo-edit" title="重做 Ctrl+Shift+Z" aria-label="重做" disabled>↷</button><button id="edit-mode" class="edit-mode active" aria-label="切换编辑或浏览" aria-pressed="true">编辑</button></div></div>
+    <div class="category-row"><div id="library-categories" class="category-chips" role="group" aria-label="组件分类"><button data-category="foundation" aria-pressed="false">地基</button><button data-category="walls" aria-pressed="false">墙体</button><button data-category="railings" aria-pressed="false">护栏</button><button data-category="stairs" aria-pressed="false">楼梯</button><button data-category="floors" aria-pressed="false">二层地板</button><button data-category="doors" aria-pressed="false">门洞</button><button data-category="roofs" aria-pressed="false">屋顶</button><button data-category="seating" aria-pressed="false">座椅</button><button data-category="tables" aria-pressed="false">桌柜</button><button data-category="lighting" aria-pressed="false">灯具</button><button data-category="plants" aria-pressed="false">植物</button><button data-category="rugs" aria-pressed="false">地毯</button><button data-category="mounted" aria-pressed="false">墙饰</button><button data-category="paving" aria-pressed="false">室外铺装</button><button data-category="props" aria-pressed="false">道具</button><button data-category="decor" aria-pressed="false">其它</button><button data-category="all" aria-pressed="true" class="active">全部</button></div><div class="editor-toolbar"><button id="undo-edit" title="撤销 Ctrl+Z" aria-label="撤销" disabled>↶</button><button id="redo-edit" title="重做 Ctrl+Shift+Z" aria-label="重做" disabled>↷</button><button id="edit-mode" class="edit-mode active" aria-label="切换编辑或浏览" aria-pressed="true">编辑</button></div></div>
     <div id="library-list" class="library-list" aria-label="模型列表" tabindex="0"></div>
     <div class="dock-foot"><span id="selection-summary" aria-live="polite">让喜欢的事物，找到自己的位置。</span><span id="save-status" role="status">布局自动保存</span><span id="library-total"></span><span>拖入场景 <span aria-hidden="true">↗</span></span></div>
   </aside>
@@ -97,10 +115,11 @@
     }
     try{
       if(location.protocol==='file:')throw new Error('请通过 http://127.0.0.1:4173/ 打开场景。直接打开 HTML 文件无法加载本地模块。');
-      const files=['vendor/three.module.js','vendor/OrbitControls.js','vendor/RoundedBoxGeometry.js','vendor/BufferGeometryUtils.js','scene.js','furniture-system.js','editor.js','object-controls.js','scene-picking.js','ground-selection.js','placement.js','architecture-system.js','wall-mounting.js','wall-stacking.js','floor-system.js','floor-controls.js','model-thumbnails.js','railing-system.js','wall-handles.js','foundation-system.js','outdoor-plots.js','building-system.js','building-controls.js','scene-menu.js','scatter-system.js','scatter-controls.js'];
+      const files=['vendor/three.module.js','vendor/OrbitControls.js','vendor/RoundedBoxGeometry.js','vendor/BufferGeometryUtils.js','scene.js','game-rules.js','game-flow.js','progression.js','progression-ui.js','levels.js','furniture-system.js','editor.js','object-controls.js','scene-picking.js','ground-selection.js','placement.js','architecture-system.js','wall-mounting.js','wall-stacking.js','floor-system.js','floor-controls.js','model-thumbnails.js','railing-system.js','wall-handles.js','foundation-system.js','outdoor-plots.js','building-system.js','building-controls.js','scene-menu.js','scatter-system.js','scatter-controls.js'];
       await Promise.all(files.map(checkFile));
       message.textContent='依赖已就绪，正在创建 3D 场景…';
-        await import('./scene.js?v=20261012-railing-finishes-1');
+        await import('./scene.js?v=20261012-progression-1');
+        const {startGame}=await import('./game-flow.js');startGame(window.__winterScene);
     }catch(error){fail(error)}
   </script>
 </body>

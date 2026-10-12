@@ -7,8 +7,8 @@
   "scripts": {
     "start": "node server.cjs",
     "build": "node build.mjs",
-    "check": "node --check railing-system.js && node --check outdoor-plots.js && node --check scene.js && node --check furniture-system.js && node --check editor.js && node --check object-controls.js && node --check ground-selection.js && node --check placement.js && node --check model-thumbnails.js && node --check floor-system.js && node --check floor-controls.js && node --check architecture-system.js && node --check wall-stacking.js && node --check wall-handles.js && node --check building-system.js && node --check building-controls.js && node --check scene-menu.js && node --check scatter-system.js && node --check scatter-controls.js",
-    "test": "node check-editor.mjs && node check-building.mjs && node check-railings.mjs && node check-outdoor-plots.mjs && node check-stacked-components.mjs && node check-loading.mjs && node check-interface.mjs && node check-camera.mjs",
+    "check": "node --check progression.js && node --check progression-ui.js && node --check levels.js && node --check game-rules.js && node --check game-flow.js && node --check railing-system.js && node --check outdoor-plots.js && node --check scene.js && node --check furniture-system.js && node --check editor.js && node --check object-controls.js && node --check ground-selection.js && node --check placement.js && node --check model-thumbnails.js && node --check floor-system.js && node --check floor-controls.js && node --check architecture-system.js && node --check wall-stacking.js && node --check wall-handles.js && node --check building-system.js && node --check building-controls.js && node --check scene-menu.js && node --check scatter-system.js && node --check scatter-controls.js",
+    "test": "node check-editor.mjs && node check-building.mjs && node check-game-flow.mjs && node check-railings.mjs && node check-outdoor-plots.mjs && node check-stacked-components.mjs && node check-loading.mjs && node check-interface.mjs && node check-camera.mjs && node check-progression.mjs",
     "setup": "node setup.cjs"
   },
   "engines": {
