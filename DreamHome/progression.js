@@ -1,4 +1,5 @@
 // Progress is separate from layouts and undo history, and shared by both modes.
+import presets from './level-presets.js';
 export const PROGRESS_KEY='dreamhome-progress-v1';
 export const ACHIEVEMENTS=[
   ['place-5','初次安家','placements',5],['rotate-5','换个角度','rotations',5],
@@ -20,7 +21,10 @@ export function createProgression({catalog,options,storage,onChange=()=>{},messa
   for(const item of catalog){if(item.id.startsWith('tool-')||required.has(item.id)||!starters.has(item.category)&&!item.id.startsWith('suite-')){starters.add(item.category);continue}candidates.push(item)}
   const locked=candidates.slice().sort((a,b)=>Number(a.id.startsWith('suite-'))-Number(b.id.startsWith('suite-'))).slice(-Math.floor(catalog.length/2));
   const rewards=Array.from({length:21},(_,i)=>locked.slice(i*2,i*2+2));
-  const propLevels=new Map(rewards.flatMap((rs,i)=>rs.map(r=>[r.id,i+1])));
+  const initialRewards=rewards.map(rs=>rs.map(r=>r.id));
+  if(!state.rewardIds&&presets.rewards)state.rewardIds=presets.rewards;
+  if(Array.isArray(state.rewardIds)&&state.rewardIds.length===21&&state.rewardIds.every(rs=>Array.isArray(rs)&&rs.length===2)&&new Set(state.rewardIds.flat()).size===42&&state.rewardIds.flat().every(id=>locked.some(r=>r.id===id)))rewards.splice(0,21,...state.rewardIds.map(rs=>rs.map(id=>locked.find(r=>r.id===id))));
+  const propLevels=new Map();const mapRewards=()=>{propLevels.clear();rewards.forEach((rs,i)=>rs.forEach(r=>propLevels.set(r.id,i+1)))};mapRewards();
   const unique=[...new Set(options)];
   // One third of all distinct finish options, never the essential yellow or baseline finishes.
   const safe=new Set(['#437244','#e7d5af','#d9a449','#c3b29c','wood-planks','tile-checker','plaster','stone','grass','#60402e']);
@@ -31,11 +35,17 @@ export function createProgression({catalog,options,storage,onChange=()=>{},messa
   const seen=new Set(state.seen);
   function save(){state.seen=[...seen];try{storage.setItem(PROGRESS_KEY,JSON.stringify(state))}catch{message('进度无法保存，请检查浏览器存储空间')}onChange()}
   const achieved=a=>(state.counts[a.metric]||0)>=a.target;
-  function allowed(id){const level=propLevels.get(id);return !level||state.completed.includes(level)}
-  function finishAllowed(id){const a=optionAchievements.get(id);return !a||achieved(a)}
+  function allowed(id){const level=propLevels.get(id);return !!state.unlockAll||!level||state.completed.includes(level)}
+  function finishAllowed(id){const a=optionAchievements.get(id);return !!state.unlockAll||!a||achieved(a)}
   function hint(id,finish=false){const a=optionAchievements.get(id);return finish&&a?`成就「${a.name}」：${METRICS[a.metric]} ${a.target} 次（${Math.min(state.counts[a.metric]||0,a.target)}/${a.target}）`: `通关第 ${propLevels.get(id)} 关后获得此道具`}
   function check(id,finish=false){const ok=finish?finishAllowed(id):allowed(id);if(!ok)message(hint(id,finish));return ok}
-  function complete(id){if(!Number.isInteger(id)||id<1||id>21||state.completed.includes(id)||id>1&&!state.completed.includes(id-1))return false;state.completed.push(id);state.counts.levels=state.completed.length;save();return true}
+  function complete(id){if(!Number.isInteger(id)||id<1||id>21||state.completed.includes(id)||!state.unlockAll&&id>1&&!state.completed.includes(id-1))return false;state.completed.push(id);state.counts.levels=state.completed.length;save();return true}
+  function redeem(code){if(code==='Asi'){state.unlockAll=true;save();return 'unlock'}if(code==='AsiDesign'){state.designUnlocked=true;save();return 'design'}return false}
+  function setRewards(level,ids){
+    if(!Number.isInteger(level)||level<1||level>21||!Array.isArray(ids)||ids.length!==2||ids[0]===ids[1]||ids.some(id=>!locked.some(r=>r.id===id)))return false;
+    ids.forEach((id,slot)=>{let row,index;rewards.forEach((rs,i)=>{const j=rs.findIndex(r=>r.id===id);if(j>=0){row=i;index=j}});[rewards[level-1][slot],rewards[row][index]]=[rewards[row][index],rewards[level-1][slot]]});
+    state.rewardIds=rewards.map(rs=>rs.map(r=>r.id));mapRewards();save();return true;
+  }
   function record(before,after,lookup,scope){
     const prev=new Map(entities(before).map(x=>[x.id,x]));let changed=false;
     const add=(metric,key)=>{key=scope+':'+metric+':'+key;if(seen.has(key))return;seen.add(key);state.counts[metric]=(state.counts[metric]||0)+1;changed=true};
@@ -46,7 +56,7 @@ export function createProgression({catalog,options,storage,onChange=()=>{},messa
         if((p.floorStyle||p.style||p.wallMaterial)!==(v.floorStyle||v.style||v.wallMaterial))add('patterns',v.id+':'+(v.floorStyle||v.style||v.wallMaterial));}
     }if(changed)save();
   }
-  return{state,rewards,locked,options:unique,finishes,optionAchievements,achieved,allowed,finishAllowed,hint,check,complete,record,levelAvailable:id=>id===1||state.completed.includes(id-1)};
+  return{state,rewards,locked,initialRewards,options:unique,finishes,optionAchievements,achieved,allowed,finishAllowed,hint,check,complete,record,redeem,setRewards,allLevelsAvailable:()=>!!state.unlockAll||Array.from({length:20},(_,i)=>i+1).every(id=>state.completed.includes(id)),levelAvailable:id=>Number.isInteger(id)&&id>=1&&id<=21&&(!!state.unlockAll||id===1||state.completed.includes(id-1))};
 }
 export function entities(layout){return[...(layout.items||[]),...['rooms','grounds','pavings','walls','doors','decorations'].flatMap(k=>layout.building?.[k]||[])]}
 export function decorateLock(button,progress,id,finish=false){

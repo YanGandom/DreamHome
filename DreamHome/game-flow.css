@@ -44,3 +44,41 @@ body[data-game-state=transition] .editor-panel,body[data-game-state=transition] 
 .reward-notice button{background:#4b835c;color:white;min-width:120px}
 @media(max-width:650px){.progress-sheet{padding:18px}.progress-grid{grid-template-columns:1fr}.achievement-toggle{top:max(216px,calc(env(safe-area-inset-top) + 200px))}.progress-sheet h2{font-size:20px}}
 @media(max-height:560px) and (orientation:landscape){.achievement-toggle{top:180px}}
+.settings-toggle{position:fixed;right:max(24px,env(safe-area-inset-right));top:max(26px,env(safe-area-inset-top));z-index:30;width:44px;height:44px;display:grid;place-items:center;border:1px solid #fff;border-radius:14px;background:#faf9f1e8;color:#526d54;box-shadow:0 4px 18px #29443016;cursor:pointer}
+.settings-toggle svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round}
+.top-actions{right:max(80px,calc(env(safe-area-inset-right) + 56px))}
+.mode-switch{right:max(134px,calc(env(safe-area-inset-right) + 110px))}
+.settings-sheet{max-width:440px;background:#fffaf0e8;backdrop-filter:blur(22px)}
+.settings-row{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:15px 0;border-bottom:1px solid #6074501b;font-size:15px}
+.settings-row button[aria-pressed=true]{background:#548262;color:white}
+.settings-row button{min-width:92px}
+.progress-sheet select,.progress-sheet input{box-sizing:border-box;min-width:0;width:100%;min-height:44px;border:1px solid #c9d7c0;border-radius:11px;padding:9px 12px;background:#fffdf7;color:#34483c;font:inherit;font-size:16px}
+.settings-row select{max-width:190px}
+#settings-code-form{margin-top:24px}#settings-code-form>label{font-size:13px}
+.code-row{display:flex;gap:8px;margin-top:8px}.code-row button{flex-shrink:0;font-size:13px}
+#settings-status,#design-status{font-size:13px;color:#527954;min-height:1.5em}
+.level-brief{background:#29453926;backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px)}
+.brief-sheet{max-width:510px;background:#fffaf0c9;backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);border:1px solid #ffffffb3;box-shadow:0 25px 85px #1c392a33}
+.brief-sheet h3{font-size:13px;letter-spacing:1px;color:#77866a;margin:24px 0 12px}.brief-sheet ol{padding-left:22px;margin:0;font-size:15px;line-height:1.8}.brief-sheet li{padding:6px 0}
+.brief-rewards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px}.brief-reward{padding:12px;background:#f9fff388;border:1px solid #fff;border-radius:16px;text-align:center;font-size:13px}.brief-reward img{display:block;width:100%;height:84px;object-fit:contain;margin-bottom:6px}
+.progress-sheet .primary-action{display:block;width:100%;min-height:48px;background:linear-gradient(135deg,#779b58,#4b7546);color:#fff;font-size:17px;border:1px solid #aec799;box-shadow:0 8px 20px #43654b28}
+.design-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:18px 0}.design-fields label,.design-task label{display:flex;flex-direction:column;gap:7px;font-size:13px}.design-task{display:grid;grid-template-columns:2fr 1fr;gap:14px;border:1px solid #dce5d3;border-radius:14px;margin:18px 0;padding:14px}.design-task legend{padding:0 6px;color:#607650}.progress-sheet :focus-visible{outline:3px solid #96b878;outline-offset:2px}
+html:not([lang=zh-CN]) .entry-logo h1{letter-spacing:1px}html:not([lang=zh-CN]) .dream-start{letter-spacing:1px}html:not([lang=zh-CN]) .task-toggle{min-width:70px}
+@media(max-width:650px){.settings-toggle{top:max(14px,env(safe-area-inset-top));right:max(14px,env(safe-area-inset-right))}.top-actions{right:68px}.mode-switch{right:122px;padding:0 9px}.design-fields{gap:10px}.progress-sheet select{font-size:14px}.brief-sheet h2{font-size:21px}}
+@media(max-width:380px){.design-fields,.design-task{grid-template-columns:1fr}.code-row{flex-direction:column}}
+
+/* Unified game controls and reset confirmation. */
+.visually-hidden{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+.game-tool-rail{position:fixed;left:max(18px,env(safe-area-inset-left));top:110px;display:flex;flex-direction:column;gap:12px;z-index:7}
+html body .game-tool-rail .camera-view-toggle{position:relative;inset:auto;transform:none;margin:0;padding:12px;width:56px;height:56px;min-width:56px;border-radius:50%;display:grid;place-items:center;box-sizing:border-box}
+html body .game-tool-rail button[hidden]{display:none}
+.game-tool-rail svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.game-tool-rail .task-ring{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg);pointer-events:none;stroke-width:3}
+.task-ring-track{stroke:#d6e3d7}#task-progress-ring{stroke:#39835b;transition:stroke-dashoffset .3s}
+body.game-intro .game-tool-rail{display:none}
+.settings-home{display:block;width:100%;margin-top:20px;padding:13px;border:1px solid #b6cbbb;border-radius:15px;background:#e4eee5;color:#27553d;font:inherit;cursor:pointer}
+.brief-reward{display:flex;flex-direction:column;align-items:center}.brief-reward img{height:110px;border-radius:12px}
+.reset-confirm{position:fixed;left:50%;bottom:calc(var(--dock-height,190px) + 22px);transform:translateX(-50%);width:min(360px,calc(100vw - 32px));box-sizing:border-box;padding:18px;z-index:60;border:1px solid #ffffffa0;border-radius:22px;background:#f1f6edef;backdrop-filter:blur(18px);box-shadow:0 12px 40px #182e3440;color:#294939;text-align:center}
+.reset-confirm[hidden]{display:none}.reset-confirm p{margin:0 0 16px;line-height:1.5}.reset-confirm div{display:flex;gap:12px}.reset-confirm button{flex:1;padding:10px;border:0;border-radius:12px;font:inherit;cursor:pointer;background:#dce7dd;color:#294939}.reset-confirm #reset-yes{background:#39835b;color:white}
+@media(max-width:680px){.game-tool-rail{left:12px;top:92px;gap:10px}html body .game-tool-rail .camera-view-toggle{width:50px;height:50px;min-width:50px}}
+@media(max-height:500px){.game-tool-rail{top:72px;gap:8px}html body .game-tool-rail .camera-view-toggle{width:44px;height:44px;min-width:44px}}

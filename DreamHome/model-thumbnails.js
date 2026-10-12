@@ -18,14 +18,14 @@ export function createModelThumbnails(renderer){
   const light=new THREE.DirectionalLight('#fff2d7',1.7);light.position.set(-3,6,5);scene.add(light);
   const canvas=document.createElement('canvas');canvas.width=canvas.height=size;const ctx=canvas.getContext('2d');
   const pixels=new Uint8Array(size*size*4),cache=new Map(),queue=new Map();
-  function request(record,image){
+  function request(record,image,priority=false){
     const key=[record.sourceId,record.color||'original',record.root.rotation.y.toFixed(3),record.wallMaterial||'',record.railingWidth||'',record.root.scale.toArray().join(',')].join(':');
     if(cache.has(key)){image.src=cache.get(key);return}
-    if(!queue.has(key))queue.set(key,{record,images:[]});queue.get(key).images.push(image);
+    if(!queue.has(key))queue.set(key,{record,images:[]});queue.get(key).images.push(image);if(priority)queue.get(key).priority=true;
   }
   function update(){
-    const next=queue.entries().next();if(next.done)return;
-    const [key,{record,images}]=next.value;queue.delete(key);
+    const next=[...queue].find(([,v])=>v.priority);const pending=next?{done:false,value:next}:queue.entries().next();if(pending.done)return;
+    const [key,{record,images}]=pending.value;queue.delete(key);
     const {model,camera}=frameThumbnail(record);scene.add(model);
     const state={target:renderer.getRenderTarget(),viewport:renderer.getViewport(new THREE.Vector4()),scissor:renderer.getScissor(new THREE.Vector4()),scissorTest:renderer.getScissorTest(),clear:renderer.getClearColor(new THREE.Color()),alpha:renderer.getClearAlpha(),autoClear:renderer.autoClear,shadows:renderer.shadowMap.enabled,exposure:renderer.toneMappingExposure};
     try{
@@ -38,6 +38,6 @@ export function createModelThumbnails(renderer){
       model.removeFromParent();renderer.setViewport(state.viewport);renderer.setScissor(state.scissor);renderer.setScissorTest(state.scissorTest);renderer.setRenderTarget(state.target);renderer.setClearColor(state.clear,state.alpha);renderer.autoClear=state.autoClear;renderer.shadowMap.enabled=state.shadows;renderer.toneMappingExposure=state.exposure;
     }
   }
-  function clearPending(){queue.clear()}
+  function clearPending(){for(const [key,value] of queue)if(!value.priority)queue.delete(key)}
   return{request,update,clearPending};
 }

@@ -22,6 +22,10 @@ check('bottom dock styles reserve scene space and cover narrow phones, landscape
 check('one accessible camera toggle replaces the four level buttons',()=>{
   assert.equal(ids.filter(id=>id==='camera-view-toggle').length,1);assert.ok(html.includes('aria-label="切换到俯视"'));assert.equal(html.includes('data-building-view='),false);assert.equal(ids.includes('building-views'),false);
 });
+check('camera, quest and trophy share an ordered icon rail; home belongs to settings and reset has confirmation',()=>{
+  const rail=html.match(/<nav class="game-tool-rail"[\s\S]*?<\/nav>/)[0];assert.deepEqual([...rail.matchAll(/<button id="([^"]+)"/g)].map(m=>m[1]),['camera-view-toggle','task-toggle','achievement-toggle']);assert.ok(rail.includes('id="task-progress-ring"'));assert.ok(rail.includes('class="visually-hidden"'));
+  const settings=html.match(/<section id="settings-panel"[\s\S]*?<\/section>/)[0];assert.ok(settings.includes('id="mode-switch"'));assert.ok(settings.includes('返回首页'));assert.equal(html.includes('class="mode-switch"'),false);assert.ok(/id="edit-mode"[^>]*>重置/.test(html));for(const id of ['reset-confirm','reset-yes','reset-no'])assert.ok(ids.includes(id));
+});
 check('component library has one category row, with construction categories and no parent tabs',()=>{
   assert.equal(html.includes('data-library-tab='),false);assert.equal(ids.includes('build-categories'),false);assert.equal(ids.includes('removed-count'),false);
   const categories=[...html.matchAll(/data-category="([^"]+)"/g)].map(m=>m[1]);assert.equal(new Set(categories).size,categories.length);

@@ -9,7 +9,7 @@ Three.js 原生几何体搭建的自由布置与建造场景。保留原冬日�
 依赖已经放在 `vendor/`，日常使用不需要联网或重新安装。
 
 1. 在本目录运行 `node server.cjs`（Node.js 18+）。
-2. 打开 http://127.0.0.1:4173/?v=20261012-progression-1 。
+2. 打开 http://127.0.0.1:4173/?v=20261012-settings-1 。
 3. 首次在其它机器安装时，运行 `node setup.cjs` 获取 Three.js 0.170.0。
 
 不要直接双击 HTML 文件。所有模块由本地 HTTP 服务加载；失败会重试，并显示具体文件和请求地址。
@@ -127,5 +127,7 @@ Three.js 及官方示例遵循 MIT 许可证。
 
 game-flow.js / game-flow.css 管理入场、模式、镜头和任务界面；game-rules.js 负责空白布局、任务条件及数量限制。check-game-flow.mjs 使用实际 Three.js 和场景状态验证模式隔离、任务进度、空白地基、镜头动画与 200 件限制。
 # 关卡与成就更新
+
+最新设置与关卡配置说明见 [SETTINGS-DESIGN.md](./SETTINGS-DESIGN.md)：当前关卡简介、音乐／音效开关、中英西法语言、`Asi` 全解锁及 `AsiDesign` 配置器。配置器可导出 `level-presets.js` 用于发布。
 
 当前版本新增 20 关（共 21 关），84 个组件入口中 42 个为关卡奖励；36 个颜色／材质选项中 12 个为成就奖励。自定义模式与关卡共享解锁进度。详细关卡及存档规则见 [PROGRESSION-DESIGN.md](./PROGRESSION-DESIGN.md)。

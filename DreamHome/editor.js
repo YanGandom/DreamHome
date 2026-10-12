@@ -22,7 +22,7 @@ export function createSceneEditor({scene,camera,renderer,controls,furnitureSyste
     const summary=$('selection-summary');summary.textContent=r?`${CATEGORIES[r.category]||'物件'} · ${r.name}`:floor?`地板 · ${floor.name}`:'让喜欢的事物，找到自己的位置。';
     if(r?.kind==='wall'){const size=r.localBounds.getSize(new THREE.Vector3()).multiply(r.root.scale);summary.textContent=`墙壁 ${size[r.lengthAxis].toFixed(2)} × ${size.y.toFixed(2)} m`}
   }
-  function setEditing(value){if(!value)scatterControls?.cancel();editing=value;interaction.setEnabled(value);builder?.setEnabled(value);const button=$('edit-mode');button.classList.toggle('active',value);button.setAttribute('aria-pressed',String(value));button.textContent=value?'编辑':'浏览';$('scene-hint').textContent=value?'轻点布置 · 拖动环绕 · 双指拖动平移 · 双指缩放':'拖动环绕 · 双指拖动平移 · 双指缩放'}
+  function setEditing(value){if(!value)scatterControls?.cancel();editing=value;interaction.setEnabled(value);builder?.setEnabled(value);$('scene-hint').textContent=value?'轻点布置 · 拖动环绕 · 双指拖动平移 · 双指缩放':'拖动环绕 · 双指拖动平移 · 双指缩放'}
   function select(id){if(id&&!editing)setEditing(true);return interaction.select(id)}
   function setLibraryCollapsed(value){
     if(interaction.dragging||builder?.dragging||scatterControls?.dragging)return false;
@@ -113,11 +113,11 @@ export function createSceneEditor({scene,camera,renderer,controls,furnitureSyste
   window.addEventListener('blur',()=>finishLibraryDrag(false));
   window.addEventListener('keydown',event=>{if(!libraryDrag)return;if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();finishLibraryDrag(false)}else if((event.ctrlKey||event.metaKey)&&['z','y'].includes(event.key.toLowerCase()))finishLibraryDrag(false)},{capture:true});
   $('undo-edit').addEventListener('click',()=>{scatterControls?.cancel();builder?.close(false);interaction.close(false);system.undo()});$('redo-edit').addEventListener('click',()=>{scatterControls?.cancel();builder?.close(false);interaction.close(false);system.redo()});
-  $('edit-mode').addEventListener('click',()=>setEditing(!editing));
+
   ui.collapse.addEventListener('click',()=>setLibraryCollapsed(!libraryCollapsed));
   for(const button of document.querySelectorAll('[data-category]'))button.addEventListener('click',()=>setCategory(button.dataset.category));
   ui.list.addEventListener('wheel',event=>{if(Math.abs(event.deltaY)>Math.abs(event.deltaX)){ui.list.scrollLeft+=event.deltaY;event.preventDefault()}},{passive:false});
   system.subscribe(type=>{renderInspector();if(type!=='preview')renderLibrary();if(type==='commit')save()});
   renderInspector();renderLibrary();
-  return{refreshLibrary:renderLibrary,select,pick:interaction.pick,pickFloor:interaction.pickFloor,beginMode:interaction.beginMode,close:interaction.close,setEditing,setCategory,setLibraryCollapsed,builder,update:(now=performance.now())=>{interaction.update();builder?.update();scatterControls?.update(now);if(!libraryCollapsed&&!libraryDrag&&!builder?.dragging&&!scatterControls?.dragging)thumbnails.update()},get libraryCollapsed(){return libraryCollapsed},get selectedId(){return selectedId},get selectedFloorId(){return interaction.selectedFloorId},get mode(){return interaction.mode},get editing(){return editing},get dragging(){return!!libraryDrag?.moved||interaction.dragging||!!builder?.dragging||!!scatterControls?.dragging},setStorageKey:key=>{storageKey=key},get storageKey(){return storageKey}};
+  return{previewThumbnail:(record,img)=>thumbnails.request(record,img,true),refreshLibrary:renderLibrary,select,pick:interaction.pick,pickFloor:interaction.pickFloor,beginMode:interaction.beginMode,close:interaction.close,setEditing,setCategory,setLibraryCollapsed,builder,update:(now=performance.now())=>{interaction.update();builder?.update();scatterControls?.update(now);if(!libraryDrag&&!builder?.dragging&&!scatterControls?.dragging)thumbnails.update()},get libraryCollapsed(){return libraryCollapsed},get selectedId(){return selectedId},get selectedFloorId(){return interaction.selectedFloorId},get mode(){return interaction.mode},get editing(){return editing},get dragging(){return!!libraryDrag?.moved||interaction.dragging||!!builder?.dragging||!!scatterControls?.dragging},setStorageKey:key=>{storageKey=key},get storageKey(){return storageKey}};
 }

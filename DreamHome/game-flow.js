@@ -1,3 +1,6 @@
+import {createLevelConfig} from './level-config.js';
+import {installSettings} from './settings.js';
+import {registerTranslations} from './i18n.js';
 import {installProgression} from './progression-ui.js';
 import {filterCustomUnlocks} from './progression.js';
 import {LEVELS,makeLevelLayout,evaluateLevel} from './levels.js';
@@ -12,16 +15,19 @@ export function startGame(app,{doc=document,storage=localStorageOrFallback(),req
   const read=key=>{try{return JSON.parse(storage.getItem(key))}catch{return null}},write=(key,value)=>{try{storage.setItem(key,JSON.stringify(value))}catch{$('save-status').textContent='无法自动保存 · 请勿刷新'}};
   let baseline=read(MODE_KEYS.baseline);if(baseline?.version!==1||!Array.isArray(baseline.items)){baseline=structuredClone(legacy);write(MODE_KEYS.baseline,baseline)}
   let mode=null,state='intro',busy=false,orbitGeneration=0,orbiting=false;
-  let levelId=1,levelBaseline=baseline,previous=system.serialize();
-  const progression=installProgression(app,{doc,storage,choose});
-  const layoutKey=()=>mode==='level'?(levelId===1?MODE_KEYS.level:'dreamhome-level-'+levelId+'-v1'):MODE_KEYS.custom;
-  const chrome=['achievement-toggle','editor-panel','library-collapse-toggle','camera-view-toggle','task-toggle','mode-switch','scene-menu-toggle','undo-edit','redo-edit','edit-mode'];
+  let levelId=1,levelBaseline=baseline,previous=system.serialize(),startingLayout=null;
+  const levelConfig=createLevelConfig(storage),invalidated=new Set();let activeLevel=levelConfig.get(1);
+  for(const level of levelConfig.all())if(level.names)registerTranslations(level.names.zh,[level.names.en||level.names.zh,level.names.es||level.names.zh,level.names.fr||level.names.zh]);
+  const progression=installProgression(app,{doc,storage,choose,levelConfig});
+  const levelKey=level=>'dreamhome-level-'+level.id+'-v1'+(level.configured?'-'+level.revision:'');
+  const layoutKey=()=>mode==='level'?levelKey(activeLevel):MODE_KEYS.custom;
+  const chrome=['achievement-toggle','editor-panel','library-collapse-toggle','camera-view-toggle','task-toggle','scene-menu-toggle','undo-edit','redo-edit','edit-mode'];
   function setChrome(enabled){for(const id of chrome)$(id).inert=!enabled;editor.setEditing(enabled);controls.enabled=enabled}
   function taskPanel(open){$('task-panel').hidden=!open;$('task-toggle').setAttribute('aria-expanded',String(open));if(open)$('task-close').focus()}
-  function tasks(){if(mode!=='level')return;const level=LEVELS[levelId-1],done=evaluateLevel(level,levelBaseline,system.serialize(),id=>system.templates.get(id)),count=done.filter(Boolean).length;
+  function tasks(){if(mode!=='level')return;const level=activeLevel,done=evaluateLevel(level,levelBaseline,system.serialize(),id=>system.templates.get(id)),count=done.filter(Boolean).length;
     ['task-floor','task-sofa','task-window'].forEach((id,i)=>{$(id).classList.toggle('complete',done[i]);$(id).textContent=(done[i]?'✓ ':'○ ')+level.labels[i];$(id).setAttribute('aria-label',(done[i]?'已完成：':'未完成：')+level.labels[i])});
     $('task-title').textContent='第 '+levelId+' 关 · '+level.name;$('task-chapter').textContent=level.intro;$('task-toggle').setAttribute('aria-label','第 '+levelId+' 关任务');
-    $('task-count').textContent=count+'/3';$('task-status').textContent=count===3?'通关！两件奖励已解锁，可在自定义模式中使用。':level.intro;
+    $('task-count').textContent=count+'/3';$('task-progress-ring').setAttribute('stroke-dashoffset',String(100-count/3*100));$('task-status').textContent=count===3?'通关！两件奖励已解锁，可在自定义模式中使用。':level.intro;
     $('next-level').hidden=!progression.state.completed.includes(levelId)&&count!==3;
     if(count===3&&state==='playing'&&!system.gesturing&&progression.complete(levelId)){progression.message('第 '+levelId+' 关完成！获得：'+progression.rewards[levelId-1].map(r=>r.name).join('、'));}
   }
@@ -38,17 +44,18 @@ export function startGame(app,{doc=document,storage=localStorageOrFallback(),req
   function showEntry(modes=false){body.classList.add('game-intro');body.classList.remove('game-playing');body.dataset.gameState=modes?'modes':'intro';$('game-entry').hidden=false;$('dream-start').hidden=modes;$('mode-panel').hidden=!modes;app.resizeScene()}
   function entryView(){const target=new THREE.Vector3(...defaultOverview.t),direction=new THREE.Vector3(...defaultOverview.p).sub(target).normalize();return{target,position:target.clone().addScaledVector(direction,controls.maxDistance||44)}}
   function highView(){const view=entryView();pose(view.position,view.target);startOrbit()}
-  async function home(){if(busy||editor.dragging)return false;busy=true;stop();if(mode)write(layoutKey(),system.serialize());state='modes';showEntry(true);const view=entryView();await tween(view.position,view.target,750);startOrbit();busy=false;$('mode-level').focus();return true}
+  async function home(){if(busy||editor.dragging)return false;busy=true;stop();if(mode&&!(mode==='level'&&invalidated.has(levelId)))write(layoutKey(),system.serialize());$('settings-panel').hidden=true;$('reset-confirm').hidden=true;state='intro';showEntry(false);const view=entryView();await tween(view.position,view.target,750);startOrbit();busy=false;$('dream-start').focus();return true}
   async function choose(next,requestedLevel=levelId){if(busy||!['level','custom'].includes(next))return false;if(next==='level'&&(!LEVELS[requestedLevel-1]||!progression.levelAvailable(requestedLevel))){progression.message('请先完成上一关');return false;}busy=true;state='transition';body.dataset.gameState='transition';$('mode-level').disabled=$('mode-custom').disabled=true;$('mode-back').disabled=true;
-    stop();if(mode)write(layoutKey(),system.serialize());$('game-entry').classList.add('departing');
+    stop();if(mode&&!(mode==='level'&&invalidated.has(levelId)))write(layoutKey(),system.serialize());$('game-entry').classList.add('departing');
     try{
       // A sideways camera pan carries the existing miniature off-screen before swapping layouts.
       const switching=next==='custom'||mode&&mode!==next;
       if(switching){const shift=new THREE.Vector3(75,0,0);await tween(camera.position.clone().add(shift),controls.target.clone().add(shift),650)}
-      levelId=requestedLevel;const level=LEVELS[levelId-1],nextKey=next==='custom'?MODE_KEYS.custom:levelId===1?MODE_KEYS.level:'dreamhome-level-'+levelId+'-v1';
-      const fallback=next==='custom'?customLayout(authored):levelId===1?legacy:makeLevelLayout(level,authored,progression.catalog);
-      levelBaseline=levelId===1?baseline:makeLevelLayout(level,authored,progression.catalog);system.levelRule=next==='level'&&levelId>1?level:null;
-      const saved=next==='custom'?filterCustomUnlocks(read(nextKey),progression,id=>system.templates.get(id)):read(nextKey);editor.setStorageKey(nextKey);if(!system.loadSaved(saved)||next==='custom'&&!system.construction.state.customGround)system.load(fallback);
+      levelId=requestedLevel;const level=levelConfig.get(levelId),nextKey=next==='custom'?MODE_KEYS.custom:levelKey(level);
+      const fallback=next==='custom'?customLayout(authored):levelId===1&&!level.configured?legacy:makeLevelLayout(level,authored,progression.catalog);
+      startingLayout=structuredClone(fallback);
+      levelBaseline=levelId===1&&!level.configured?baseline:makeLevelLayout(level,authored,progression.catalog);system.levelRule=next==='level'&&(levelId>1||level.configured)&&level.preset!=='original'?level:null;activeLevel=structuredClone(level);
+      const saved=next==='custom'?filterCustomUnlocks(read(nextKey),progression,id=>system.templates.get(id)):invalidated.has(levelId)?null:read(nextKey);invalidated.delete(levelId);editor.setStorageKey(nextKey);if(!system.loadSaved(saved)||next==='custom'&&!system.construction.state.customGround)system.load(fallback);
       system.clearHistory();previous=system.serialize();system.construction.setView('outside');mode=next;body.dataset.gameMode=mode;
       const roomScale=next==='level'&&levelId>1?Math.max(1,Math.max(level.width,level.depth)/9):1;
       app.views.overview=next==='custom'||levelId>1?{p:[11*roomScale,12*roomScale,15*roomScale],t:[0,1,0]}:structuredClone(defaultOverview);
@@ -58,9 +65,14 @@ export function startGame(app,{doc=document,storage=localStorageOrFallback(),req
       editor.setCategory('all');editor.setLibraryCollapsed(false);editor.setEditing(false);controls.enabled=false;
       body.classList.remove('game-intro');body.classList.add('game-playing');app.resizeScene();
       const view=app.views.overview;await tween(new THREE.Vector3(...view.p),new THREE.Vector3(...view.t),switching?850:1400);
-      $('game-entry').hidden=true;$('game-entry').classList.remove('departing');state='playing';body.dataset.gameState='playing';setChrome(true);$('task-toggle').hidden=mode!=='level';tasks();write(layoutKey(),system.serialize());$('mode-switch').focus();return true;
+      $('game-entry').hidden=true;$('game-entry').classList.remove('departing');state='playing';body.dataset.gameState='playing';setChrome(true);$('task-toggle').hidden=mode!=='level';tasks();write(layoutKey(),system.serialize());$('camera-view-toggle').focus();return true;
     }finally{busy=false;$('mode-level').disabled=$('mode-custom').disabled=$('mode-back').disabled=false}
   }
+  function reset(){if(busy||state!=='playing'||editor.dragging||!startingLayout)return false;state='resetting';editor.close(false);editor.builder.close(false);editor.setEditing(false);system.load(structuredClone(startingLayout));system.clearHistory();previous=system.serialize();state='playing';editor.setEditing(true);controls.enabled=true;app.goView('overview',true);tasks();write(layoutKey(),system.serialize());$('reset-confirm').hidden=true;$('edit-mode').focus();return true}
+  $('edit-mode').addEventListener('click',()=>{if(busy||state!=='playing'||editor.dragging)return;$('reset-confirm').hidden=false;$('reset-no').focus()});
+  $('reset-no').addEventListener('click',()=>{$('reset-confirm').hidden=true;$('edit-mode').focus()});
+  $('reset-yes').addEventListener('click',reset);
+  doc.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('reset-confirm').hidden){$('reset-confirm').hidden=true;$('edit-mode').focus();e.preventDefault();e.stopImmediatePropagation()}},{capture:true});
   $('dream-start').addEventListener('click',()=>{if(busy)return;state='modes';showEntry(true);$('mode-level').focus()});
   $('mode-back').addEventListener('click',()=>{if(!busy){state='intro';showEntry(false);$('dream-start').focus()}});
   $('mode-level').addEventListener('click',()=>progression.showLevels());$('next-level').addEventListener('click',()=>{taskPanel(false);progression.showLevels()});$('mode-custom').addEventListener('click',()=>choose('custom'));$('mode-switch').addEventListener('click',home);
@@ -68,5 +80,5 @@ export function startGame(app,{doc=document,storage=localStorageOrFallback(),req
   doc.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('task-panel').hidden){event.preventDefault();event.stopImmediatePropagation();taskPanel(false);$('task-toggle').focus()}},{capture:true});
   system.subscribe(type=>{const current=system.serialize();if(state==='playing'&&type==='action')progression.record(previous,current,id=>system.templates.get(id),mode==='level'?'level-'+levelId:'custom');if(['commit','restore','action'].includes(type))previous=current;if(state==='playing'&&['commit','restore'].includes(type))tasks()});
   stop();showEntry();highView();$('task-toggle').hidden=true;
-  const api={choose,home,tasks,progression,get levelId(){return levelId},get orbiting(){return orbiting},get mode(){return mode},get state(){return state},get busy(){return busy}};app.game=api;return api;
+  const api={choose,home,reset,tasks,progression,levelConfig,get levelId(){return levelId},get orbiting(){return orbiting},get mode(){return mode},get state(){return state},get busy(){return busy}};app.game=api;api.settings=installSettings(app,{doc,storage,progression,levelConfig,onConfig:id=>{invalidated.add(id)}});return api;
 }

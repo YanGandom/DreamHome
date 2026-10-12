@@ -13,7 +13,7 @@ const themes=[
 ];
 export const LEVELS=[{id:1,name:'小屋焕新',intro:'为熟悉的小屋换个新面貌',labels:['更换一处地砖样式','新增双人沙发并旋转角度','删除一个原有窗户']},...themes.map(([name,width,depth,seating,tables,lighting,plants,theme],i)=>({id:i+2,name,width,depth,counts:{seating,tables,lighting,plants},theme,empty:[6,18].includes(i+2),renew:theme==='renew',intro:`地基不超过 ${width} × ${depth} 米 · 在房间内完成布置`,labels:[`建好 ${width} × ${depth} 米地基和 ${i<4?1:2} 面墙`,`${seating} 件座椅 / ${tables} 件桌柜 / ${lighting} 盏灯 / ${plants} 盆植物`,theme==='renew'?'所有原有家具更换配色，并更换全部地板花纹':theme==='yellow'?'超过 30% 的室内家具使用蜂蜜黄色':theme==='green'?'超过 30% 的室内家具使用森林绿色':theme==='cream'?'超过 30% 的室内家具使用奶油白色':theme==='tile'?'全部房间使用瓷砖地板，且旋转至少一块地板花纹':'全部房间使用木地板，并旋转至少一件座椅'],wallCount:i<4?1:2}))];
 export function makeLevelLayout(level,authored,catalog){
-  if(level.id===1)return structuredClone(authored);
+  if(level.configured?level.preset==='original':level.id===1)return structuredClone(authored);
   const out=customLayout(authored),room=out.building.rooms[0];room.width=level.width;room.depth=level.depth;
   if(level.empty){out.building.rooms=[];return out}
   // Every supplied room uses the same editable native foundation and walls as the dock.
@@ -25,12 +25,13 @@ export function makeLevelLayout(level,authored,catalog){
   });return out;
 }
 export function evaluateLevel(level,baseline,current,lookup){
+  if(level.configured)return evaluateConfigured(level,baseline,current,lookup);
   if(level.id===1)return levelTasks(baseline,current);
   const rooms=current.building?.rooms||[],walls=current.building?.walls||[];
   const inside=v=>rooms.some(r=>v.position&&Math.abs(v.position[0]-r.x)<=r.width/2&&Math.abs(v.position[2]-r.z)<=r.depth/2&&Math.abs(v.position[1]-(r.elevation??(r.level===2?4.22:1.02)))<.6);
   const furnishings=current.items.filter(v=>v.visible!==false&&inside(v)&&lookup(v.sourceId)?.kind==='furniture');
   const main=rooms.find(r=>r.level===1&&Math.abs(r.width-level.width)<.06&&Math.abs(r.depth-level.depth)<.06);
-  const structure=!!main&&rooms.every(r=>r.width<=level.width&&r.depth<=level.depth)&&walls.filter(w=>w.rooms?.includes(main.id)).length>=level.wallCount;
+  const structure=!!main&&rooms.every(r=>r.width<=level.width&&r.depth<=level.depth)&&roomWallCount(main,current,lookup)>=level.wallCount;
   const content=Object.entries(level.counts).every(([cat,n])=>furnishings.filter(v=>lookup(v.sourceId)?.category===cat).length>=n);
   let style=false;const color={yellow:'#d9a449',green:'#437244',cream:'#e7d5af'}[level.theme];
   if(color)style=furnishings.length>0&&furnishings.filter(v=>v.color===color).length/furnishings.length>.3;
@@ -41,3 +42,21 @@ export function evaluateLevel(level,baseline,current,lookup){
   else style=rooms.length>0&&rooms.every(r=>r.floorStyle?.startsWith('wood-'))&&furnishings.some(v=>lookup(v.sourceId)?.category==='seating'&&Math.abs(v.rotation)>.01);
   return[structure,content,!!style];
 }
+
+export function evaluateConfigured(level,baseline,current,lookup){
+  const rooms=current.building?.rooms||[],old=new Map(baseline.items.map(i=>[i.id,i]));
+  const items=current.items.filter(v=>v.visible!==false&&lookup(v.sourceId)?.kind==='furniture'&&rooms.some(r=>v.position&&Math.abs(v.position[0]-r.x)<=r.width/2&&Math.abs(v.position[2]-r.z)<=r.depth/2&&Math.abs(v.position[1]-(r.elevation??(r.level===2?4.22:1.02)))<.6));
+  return level.tasks.map(t=>{
+    if(t.type==='structure'){const r=rooms.find(r=>r.level===1&&Math.abs(r.width-level.width)<.06&&Math.abs(r.depth-level.depth)<.06);return !!r&&roomWallCount(r,current,lookup)>=level.wallCount}
+    if(t.type==='furnish')return Object.entries(level.counts).every(([cat,n])=>items.filter(i=>lookup(i.sourceId)?.category===cat).length>=n);
+    if(t.type==='place')return items.filter(i=>!old.has(i.id)).length>=t.target;
+    if(t.type==='rotate')return items.filter(i=>Math.abs(i.rotation-(old.get(i.id)?.rotation||0))>.01).length>=t.target;
+    if(t.type==='lamps')return items.filter(i=>lookup(i.sourceId)?.category==='lighting').length>=t.target;
+    if(t.type==='windows')return baseline.items.filter(i=>i.visible!==false&&i.sourceId.startsWith('window-')).filter(i=>!current.items.some(n=>n.id===i.id&&n.visible!==false)).length>=t.target;
+    if(t.type==='newSofa')return items.filter(i=>!old.has(i.id)&&['salon-sofa','hearth-sofa'].includes(i.sourceId)&&Math.abs(i.rotation)>.01).length>=t.target;
+    if(t.type==='tileChanged')return rooms.filter(r=>r.floorStyle?.startsWith('tile-')&&baseline.building?.rooms?.some(b=>b.id===r.id&&b.floorStyle!==r.floorStyle)).length+(current.building?.pavings||[]).filter(r=>r.family==='tiles'&&baseline.building?.pavings?.some(b=>b.id===r.id&&b.style!==r.style)).length>=t.target;
+    if(['yellow','green','cream'].includes(t.type)){const color={yellow:'#d9a449',green:'#437244',cream:'#e7d5af'}[t.type];return items.length>0&&items.filter(i=>i.color===color).length/items.length>level.percent/100}
+    return evaluateLevel({...level,configured:false,id:2,theme:t.type},baseline,current,lookup)[2];
+  });
+}
+function roomWallCount(room,current,lookup){return(current.building?.walls||[]).filter(w=>w.rooms?.includes(room.id)).length+current.items.filter(i=>i.visible!==false&&lookup(i.sourceId)?.kind==='wall'&&i.position&&Math.abs(i.position[0]-room.x)<=room.width/2+.2&&Math.abs(i.position[2]-room.z)<=room.depth/2+.2&&Math.abs(i.position[1]-(room.elevation??(room.level===2?4.22:1.02)))<.65).length}

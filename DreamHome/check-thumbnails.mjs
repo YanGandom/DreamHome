@@ -34,6 +34,7 @@ export function checkThumbnails(records,test){
       const before=state(),service=createModelThumbnails(renderer),a={},b={};service.request(records[0],a);service.request(records[0],b);service.update();
       assert.equal(renders,1);assert.equal(a.src,b.src);assert.ok(a.src.startsWith('data:image/png'));assert.equal(imageData.data[0],22);assert.equal(imageData.data[(240-1)*240*4],11);assert.deepEqual(state(),before);
       const cached={};service.request(records[0],cached);service.update();assert.equal(renders,1);assert.equal(cached.src,a.src);
+      const dock={},reward={};service.request(records[2],dock);service.request(records[3],reward,true);service.clearPending();service.update();assert.ok(reward.src?.startsWith('data:image/png'));assert.equal(dock.src,undefined);assert.deepEqual(state(),before);
       fail=true;service.request(records[1],{});assert.throws(()=>service.update(),/mock GPU failure/);assert.deepEqual(state(),before);
     }finally{document.createElement=originalCreate}
     }
