@@ -42,11 +42,12 @@ export function createPlacement({surfaces,walls=[],getFurniture=()=>[],architect
       if(base?.kind==='wall'){normal.copy(first.face.normal).applyMatrix3(matrix.getNormalMatrix(first.object.matrixWorld));if(normal.y>.45){const point=first.point.clone();point.y=architecture.bounds(base).max.y+.01-r.localBounds.min.y*r.root.scale.y;return{id:'wall-top',point,wallId:base.id}}}
       const hit=raycaster.intersectObjects(typeof surfaces==='function'?surfaces():surfaces,true).find(h=>h.object.userData.buildType==='room'&&h.face.normal.y>.5);
       if(hit){const point=hit.point.clone();point.y+=r.initial.y-1.02;return{id:'foundation',point}}
-      const point=raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-r.root.position.y),new THREE.Vector3());return point?{id:'foundation',point}:null;
+      const point=raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-(groundY+SURFACE_GAP-r.localBounds.min.y*r.root.scale.y)),new THREE.Vector3());return point?{id:'outdoor',point}:null;
     }
     const hit=supportHit(raycaster,id);if(hit)return hit;
-    if(r?.kind==='mounted'||!['auto','outdoor'].includes(activeSurface))return null;
-    const point=raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-groundY),new THREE.Vector3());return point?{id:'outdoor',point}:null;
+    if(!['auto','outdoor'].includes(activeSurface))return null;
+    if(r?.kind==='mounted'&&raycaster.intersectObjects(wallRecords().map(w=>w.root),true).length)return null;
+    const point=raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-groundY),new THREE.Vector3());return point?{id:'outdoor',point,wallId:r?.kind==='mounted'?null:undefined}:null;
   }
   function pick(raycaster,id){const s=pickSurface(raycaster,id);if(!s)return null;s.point.surfaceId=s.id;s.point.wallId=s.wallId;s.point.faceSign=s.faceSign;return s.point}
   function supportAt(x,z,hint=Infinity,id){down.set(new THREE.Vector3(x,Number.isFinite(hint)?hint+.10:100,z),new THREE.Vector3(0,-1,0));return pickSurface(down,id)}
@@ -61,7 +62,7 @@ export function createPlacement({surfaces,walls=[],getFurniture=()=>[],architect
   }
   function restingHeight(r,x,z,surfaceY){return Math.max(surfaceY,floorHeight(r,x,z,surfaceY))+SURFACE_GAP-r.localBounds.min.y}
   function ensureClearance(r){
-    if(r.kind!=='furniture')return;
+    if(r.kind!=='furniture'&&!r.detached)return;
     const {x,y,z}=r.root.position,bottom=y+r.localBounds.min.y;
     // Normalizing saves uses architecture and already-normalized rugs only.
     // Excluding peer furniture avoids lifting stacked/coplanar models each load.

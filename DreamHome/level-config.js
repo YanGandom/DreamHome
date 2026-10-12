@@ -1,3 +1,4 @@
+import {layoutCount} from './game-rules.js';
 import {LEVELS} from './levels.js';
 import presets from './level-presets.js';
 import {translate} from './i18n.js';
@@ -26,9 +27,15 @@ export function configuredLabels(d){return d.tasks.map(t=>{
   return TASK_TYPES[t.type]+' · '+t.target;
 })}
 export function createLevelConfig(storage){
+  let scenes=structuredClone(presets.scenes||{});
+  try{const saved=JSON.parse(storage.getItem(LEVEL_CONFIG_KEY));if(saved?.version===1)scenes={...scenes,...saved.scenes}}catch{}
+  function validateScene(layout){if(layout?.version!==1||!Array.isArray(layout.items)||layoutCount(layout)>200||layout.items.some(i=>!Array.isArray(i.position)||i.position.length!==3||!i.position.every(Number.isFinite)||!Number.isFinite(i.rotation)))throw Error('无效场景或超过 200 件物件');return structuredClone(layout)}
+  for(const id of Object.keys(scenes))try{if(!LEVELS[+id-1])throw Error();scenes[id]=validateScene(scenes[id])}catch{delete scenes[id]}
   let overrides={};for(const [id,d]of Object.entries(presets.levels||{}))try{if(LEVELS[+id-1])overrides[id]=validateLevelDraft(d)}catch{}
   try{const saved=JSON.parse(storage.getItem(LEVEL_CONFIG_KEY));if(saved?.version===1)for(const [id,d]of Object.entries(saved.levels||{})){if(LEVELS[+id-1])overrides[id]=validateLevelDraft(d)}}catch{}
-  function get(id){const base=LEVELS[id-1],d=overrides[id];if(!d)return base;let hash=2166136261;for(const c of JSON.stringify(d))hash=Math.imul(hash^c.charCodeAt(0),16777619);return{...base,...structuredClone(d),revision:(hash>>>0).toString(16),name:d.names.zh,configured:true,empty:d.preset==='empty',renew:d.tasks.some(t=>t.type==='renew'),labels:configuredLabels(d),intro:`地基不超过 ${d.width} × ${d.depth} 米 · 在房间内完成布置`}}
-  function set(id,d){if(!LEVELS[id-1])throw Error('无效关卡');const next={...overrides,[id]:validateLevelDraft(d)};storage.setItem(LEVEL_CONFIG_KEY,JSON.stringify({version:1,levels:next}));overrides=next;return get(id)}
-  return{get,all:()=>LEVELS.map(l=>get(l.id)),draft:id=>structuredClone(overrides[id]||levelDraft(LEVELS[id-1])),set,export:()=>({version:1,levels:structuredClone(overrides)})};
+  function getBase(id){const base=LEVELS[id-1],d=overrides[id];if(!d)return base;let hash=2166136261;for(const c of JSON.stringify(d))hash=Math.imul(hash^c.charCodeAt(0),16777619);return{...base,...structuredClone(d),revision:(hash>>>0).toString(16),name:d.names.zh,configured:true,empty:d.preset==='empty',renew:d.tasks.some(t=>t.type==='renew'),labels:configuredLabels(d),intro:`地基不超过 ${d.width} × ${d.depth} 米 · 在房间内完成布置`}}
+  function get(id){const level=getBase(id);if(!scenes[id])return level;let hash=2166136261;for(const c of JSON.stringify([overrides[id],scenes[id]]))hash=Math.imul(hash^c.charCodeAt(0),16777619);return{...level,initialLayout:structuredClone(scenes[id]),sceneConfigured:true,revision:(hash>>>0).toString(16)}}
+  function setScene(id,layout){if(!LEVELS[id-1])throw Error('无效关卡');const next={...scenes,[id]:validateScene(layout)};storage.setItem(LEVEL_CONFIG_KEY,JSON.stringify({version:1,levels:overrides,scenes:next}));scenes=next;return get(id)}
+  function set(id,d){if(!LEVELS[id-1])throw Error('无效关卡');const next={...overrides,[id]:validateLevelDraft(d)};storage.setItem(LEVEL_CONFIG_KEY,JSON.stringify({version:1,levels:next,scenes}));overrides=next;return get(id)}
+  return{get,setScene,all:()=>LEVELS.map(l=>get(l.id)),draft:id=>structuredClone(overrides[id]||levelDraft(LEVELS[id-1])),set,export:()=>({version:1,levels:structuredClone(overrides),scenes:structuredClone(scenes)})};
 }

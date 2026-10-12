@@ -14,7 +14,7 @@ export function createSceneEditor({scene,camera,renderer,controls,furnitureSyste
   let selectedId=null,selectedFloorId=null,editing=true,category='all',operation=null,libraryDrag=null,suppressClick=false,builder=null;
   let libraryCollapsed=false,scatterControls=null,storageKey=STORAGE_KEY;
   const thumbnails=thumbnailFactory(renderer),dragMarker=createGroundSelection(scene,'LibraryPlacement'),raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
-  try{const saved=localStorage.getItem(STORAGE_KEY);if(saved){if(system.loadSaved(JSON.parse(saved)))ui.status.textContent='已恢复上次布局 · 本机';else ui.status.textContent='已使用初始布局'}}catch{ui.status.textContent='本次可编辑 · 本地保存不可用'}
+
   function save(){try{localStorage.setItem(storageKey,JSON.stringify(system.serialize()));ui.status.textContent='已自动保存 · 本机'}catch{ui.status.textContent='无法自动保存 · 请勿刷新'}}
   function renderInspector(){
     const r=system.get(selectedId),floor=system.floorSystem?.get(selectedFloorId);
@@ -40,12 +40,12 @@ export function createSceneEditor({scene,camera,renderer,controls,furnitureSyste
     // One entry per model family, including stored instances. Restoring an
     // instance reuses its identity, color and transform instead of making a copy.
     const stored=new Map();for(const r of system.all())if(!r.root.visible&&!(system.construction?.state.customGround&&r.id===r.sourceId)&&!stored.has(r.catalogId))stored.set(r.catalogId,r);
-    const entries=[...system.catalog().map(template=>({key:template.id,record:stored.get(template.catalogId)||template,kind:stored.has(template.catalogId)?'removed':'catalog',category:template.category})),...(system.scatter?.catalog||[]).map(record=>({key:record.id,record,kind:'scatter',category:'props'})),...(builder?.catalog||[]).map(record=>({key:record.id,record,kind:'build',category:BUILD_CATEGORIES[record.tool]}))].filter(entry=>category==='all'||entry.category===category).sort((a,b)=>{const order=['foundation','walls','railings','stairs','floors','doors','roofs','seating','tables','lighting','plants','rugs','mounted','paving','props','decor'];return order.indexOf(a.category)-order.indexOf(b.category)});
+    const entries=[...system.catalog().map(template=>({key:template.id,thumbnail:template.kind==='wall'?template:null,record:stored.get(template.catalogId)||template,kind:stored.has(template.catalogId)?'removed':'catalog',category:template.category})),...(system.scatter?.catalog||[]).map(record=>({key:record.id,record,kind:'scatter',category:'props'})),...(builder?.catalog||[]).map(record=>({key:record.id,record,kind:'build',category:BUILD_CATEGORIES[record.tool]}))].filter(entry=>category==='all'||entry.category===category).sort((a,b)=>{const order=['foundation','walls','railings','stairs','floors','doors','roofs','seating','tables','lighting','plants','rugs','mounted','paving','props','decor'];return order.indexOf(a.category)-order.indexOf(b.category)});
     $('library-total').textContent=system.objectCount()+' / 200 件';ui.list.replaceChildren();
     if(!entries.length){const p=document.createElement('p');p.className='library-empty';p.textContent='这个分类暂时没有物件';ui.list.append(p);return}
-    for(const {key,record:r,kind} of entries){
+    for(const {key,record:r,kind,thumbnail} of entries){
       const card=document.createElement('button');card.type='button';card.className='library-card';card.dataset.itemId=key;if(kind==='removed')card.dataset.restoreId=r.id;card.setAttribute('aria-label',(kind==='removed'?'恢复':'添加')+' '+r.name);
-      const preview=document.createElement('img');preview.className='model-preview';preview.alt='';preview.draggable=false;preview.setAttribute('aria-hidden','true');card.append(preview);thumbnails.request(r,preview);
+      const preview=document.createElement('img');preview.className='model-preview';preview.alt='';preview.draggable=false;preview.setAttribute('aria-hidden','true');card.append(preview);thumbnails.request(thumbnail||r,preview);
       if(decorateLock(card,system.progression,key)){
         let swipe=null,swiped=false;
         card.addEventListener('pointerdown',e=>{if(e.button!==0||e.isPrimary===false)return;swiped=false;swipe={id:e.pointerId,x:e.clientX,scroll:ui.list.scrollLeft||0};card.setPointerCapture(e.pointerId)});
@@ -65,15 +65,16 @@ export function createSceneEditor({scene,camera,renderer,controls,furnitureSyste
       card.addEventListener('click',()=>{
         if(suppressClick){suppressClick=false;return}
         builder?.close();interaction.close();
-        if(kind==='catalog'){const custom=system.construction?.state.customGround,base=system.construction?.all()[0];if(custom&&r.kind==='mounted'&&!system.architecture.walls().length){toast('请先添加墙壁，再将墙饰拖到内侧墙面');return}const near=custom&&base?new THREE.Vector3(base.x,system.construction.height(base),base.z):undefined;const copy=system.add(r.sourceId,near);if(copy){select(copy.id);toast('已添加'+r.name+'，拖动摆放后点击绿色对勾')}else toast('已达到 200 件物件上限，请先删除一些物件')}
+        if(kind==='catalog'){const custom=system.construction?.state.customGround,base=system.construction?.all()[0];const near=custom&&base?new THREE.Vector3(base.x,system.construction.height(base),base.z):undefined;const copy=system.add(r.sourceId,near);if(copy){select(copy.id);toast('已添加'+r.name+'，拖动摆放后点击绿色对勾')}else toast('已达到 200 件物件上限，请先删除一些物件')}
         else if(kind==='removed'){if(!system.canAdd()){toast('场景最多摆放 200 件物件，请先删除一些物件');return}system.restore(r.id);select(r.id);toast(r.name+'已恢复到收纳前的位置')}
       });ui.list.append(card);
     }
   }
   let interaction;
-  builder=createBuildingControls({scene,camera,renderer,controls,system,occluders,toast,onInteract,onSelect:()=>{if(!editing)setEditing(true);interaction?.close()},onView:(view,room)=>{interaction?.close();onBuildingView(view,room)}});
+  builder=createBuildingControls({scene,camera,renderer,controls,system,occluders,toast,onInteract,onLooseSelect:id=>select(id),onSelect:()=>{if(!editing)setEditing(true);interaction?.close()},onView:(view,room)=>{interaction?.close();onBuildingView(view,room)}});
   if(system.scatter)scatterControls=createScatterControls({scene,camera,renderer,controls,system,list:ui.list,toast,onStart:()=>{interaction.close();builder?.close();if(!editing)setEditing(true);onInteract()},onFinish:()=>{renderLibrary();renderInspector()}});
   interaction=createObjectControls({scene,camera,renderer,controls,system,occluders,onInteract,onRemove:remove,onSelection:(id,mode,floorId)=>{if(id||floorId)builder?.dismiss();selectedId=id;selectedFloorId=floorId||null;operation=mode;renderInspector();renderLibrary()}});
+  try{const saved=localStorage.getItem(STORAGE_KEY);if(saved){if(system.loadSaved(JSON.parse(saved)))ui.status.textContent='已恢复上次布局 · 本机';else ui.status.textContent='已使用初始布局'}}catch{ui.status.textContent='本次可编辑 · 本地保存不可用'}
   builder?.setEnabled(editing);
   system.placement?.setSurface('auto');
   function dragOver(event){

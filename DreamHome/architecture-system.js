@@ -46,10 +46,10 @@ export function createArchitectureSystem({system,foundationMeshes,outdoorMeshes,
   const moveMounted=mounting.move;
   function sync(){
     stacking.sync();
-    for(const wall of walls())setMaterial(wall,wall.wallMaterial||null);
+    for(const wall of walls()){system.syncWallDetails(wall);setMaterial(wall,wall.wallMaterial||null)}
     for(const r of system.all()){
       if(r.kind==='wall')continue;
-      if(r.kind==='mounted'&&!r.mount)bind(r,r.mountWallId);
+      if(r.kind==='mounted'&&!r.detached&&!r.mount)bind(r,r.mountWallId);
       if(!r.mount)continue;const wall=system.get(r.mount.wallId);if(!wall?.root.visible)continue;
       if(r.mount.type==='face'){mounting.sync(r,wall);continue}
       const p=new THREE.Vector3(...r.mount.local);
@@ -109,11 +109,28 @@ export function createArchitectureSystem({system,foundationMeshes,outdoorMeshes,
   sync();
   function minimumLength(wallId){const w=system.get(wallId);return Math.max(stacking.minimumLength(w),...system.all().filter(r=>r.kind==='mounted'&&r.mount?.wallId===wallId).map(r=>mounting.offsets(r,w).getSize(new THREE.Vector3())[axis(w)]*w.root.scale[axis(w)]+.2))}
   function minimumHeight(wallId){return Math.max(.6,...system.all().filter(r=>r.kind==='mounted'&&r.mount?.wallId===wallId).map(r=>r.localBounds.getSize(new THREE.Vector3()).y+.2))}
+  function snapToFoundation(r){
+    if(r.mount?.type==='stack')return false;
+    const rooms=system.construction?.all()||[],p=r.root.position;
+    const room=rooms.filter(v=>system.construction.pointInside(p.x,p.z,v)&&Math.abs(system.construction.height(v)-p.y)<1.2).sort((a,b)=>system.construction.height(b)-system.construction.height(a))[0];
+    if(!room)return false;
+    const sides=[['x',-1,room.width/2+p.x-room.x],['x',1,room.width/2-p.x+room.x],['z',-1,room.depth/2+p.z-room.z],['z',1,room.depth/2-p.z+room.z]].sort((a,b)=>a[2]-b[2]),[cross,sign]=sides[0];
+    const along=r.lengthAxis,body=r.collisionBounds||r.localBounds,size=body.getSize(new THREE.Vector3()),span=cross==='x'?room.depth:room.width;
+    r.root.scale[along]=Math.min(r.root.scale[along],span/size[along]);
+    const faceAngle=cross==='x'?-sign*Math.PI/2:sign>0?Math.PI:0;
+    r.root.rotation.y=faceAngle-(along==='z'?Math.PI/2:0)-(r.interiorSign===-1?Math.PI:0);
+    const length=size[along]*r.root.scale[along],thick=size[along==='x'?'z':'x'];
+    const center=new THREE.Vector3(room.x,system.construction.height(room)+.01,room.z),other=cross==='x'?'z':'x';
+    center[cross]+=sign*((cross==='x'?room.width:room.depth)/2-thick/2);
+    center[other]=THREE.MathUtils.clamp(p[other],room[other]-span/2+length/2,room[other]+span/2-length/2);
+    const offset=body.getCenter(new THREE.Vector3()).multiply(r.root.scale);offset.y=r.localBounds.min.y*r.root.scale.y;offset.applyQuaternion(r.root.quaternion);r.root.position.copy(center.sub(offset));return true;
+  }
   function validWall(r,replacement=null){
     if(stacking.supportId(r))return stacking.valid(r);
     if(r.dynamic)return system.construction.validWall(r.data);
     r.root.updateMatrixWorld(true);const b=(r.collisionBounds||r.localBounds).clone().applyMatrix4(r.root.matrixWorld);
     if(system.construction?.componentDefaults){
+      if(!system.construction.all().some(v=>b.min.x<v.x+v.width/2&&b.max.x>v.x-v.width/2&&b.min.z<v.z+v.depth/2&&b.max.z>v.z-v.depth/2))return Math.abs(r.root.position.x)<=65&&Math.abs(r.root.position.z)<=65;
       const rooms=system.construction.all().map(v=>v.id===replacement?.id?replacement:v).filter(v=>Math.abs(system.construction.height(v)-(r.root.position.y+(r.wallTop?.38:0)))<.7);
       const xs=[b.min.x,b.max.x,...rooms.flatMap(v=>[v.x-v.width/2,v.x+v.width/2]).filter(x=>x>b.min.x&&x<b.max.x)],zs=[b.min.z,b.max.z,...rooms.flatMap(v=>[v.z-v.depth/2,v.z+v.depth/2]).filter(z=>z>b.min.z&&z<b.max.z)];xs.sort((a,b)=>a-b);zs.sort((a,b)=>a-b);
       for(let i=1;i<xs.length;i++)for(let j=1;j<zs.length;j++){const x=(xs[i-1]+xs[i])/2,z=(zs[j-1]+zs[j])/2;if(!rooms.some(v=>Math.abs(x-v.x)<=v.width/2+.04&&Math.abs(z-v.z)<=v.depth/2+.04))return false}return true;
@@ -122,5 +139,5 @@ export function createArchitectureSystem({system,foundationMeshes,outdoorMeshes,
     const minX=right?-.03:-8.15,maxX=left?.03:8.15;
     return b.min.x>=minX-.001&&b.max.x<=maxX+.001&&b.min.z>=-5.15&&b.max.z<=5.15;
   }
-  return{stacking,styles,surfaces:SURFACES,walls,bounds,normal,faceAngle,faces:mounting.faces,classifyFace:mounting.classify,bind,bindSupport,moveMounted,sync,setMaterial,minimumLength,minimumHeight,validWall,groundLayers:foundations.filter(f=>f.mesh.userData.surfaceId==='outdoor'),get footprint(){return footprint}};
+  return{snapToFoundation,stacking,styles,surfaces:SURFACES,walls,bounds,normal,faceAngle,faces:mounting.faces,classifyFace:mounting.classify,bind,bindSupport,moveMounted,sync,setMaterial,minimumLength,minimumHeight,validWall,groundLayers:foundations.filter(f=>f.mesh.userData.surfaceId==='outdoor'),get footprint(){return footprint}};
 }

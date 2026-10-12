@@ -1,5 +1,27 @@
 // Chinese is the source locale. Every row contains English, Spanish and French.
 export const TRANSLATIONS=Object.fromEntries(`
+自由摆放二层地板|Place upper floors freely|Coloca pisos superiores libremente|Placez librement les planchers supérieurs
+自由摆放墙壁|Place walls freely|Coloca muros libremente|Placez les murs librement
+放到地基上自动吸附四边|Walls snap to foundation edges|Los muros se ajustan a los bordes de la base|Les murs s’alignent sur les bords de la fondation
+编辑关卡场景|Edit level scene|Editar escena del nivel|Modifier la scène du niveau
+无效场景或超过|Invalid scene or exceeding|Escena no válida o supera|Scène invalide ou dépasse
+场景编辑已开启|Scene editing enabled|Edición de escenas activada|Modification de scène activée
+场景已保存|Scene saved|Escena guardada|Scène enregistrée
+场景已保存，下次开始此关卡生效|Scene saved. It applies the next time you start this level.|Escena guardada. Se aplicará al volver a iniciar este nivel.|Scène enregistrée. Elle sera utilisée au prochain lancement du niveau.
+重新开始游戏|Restart the game|Reiniciar el juego|Recommencer le jeu
+将清空所有关卡进度|All level progress will be cleared|Se borrará todo el progreso de niveles|Toute la progression des niveaux sera effacée
+关卡存档和奖励解锁|Level saves and reward unlocks|Partidas de niveles y recompensas desbloqueadas|Sauvegardes de niveaux et récompenses débloquées
+保留自定义布置|Keep custom layouts|Conservar distribuciones personalizadas|Conserver les agencements personnalisés
+关卡设计和设置|Level designs and settings|Diseños de niveles y ajustes|Conceptions des niveaux et paramètres
+将清空所有关卡进度、关卡存档和奖励解锁，保留自定义布置、关卡设计和设置。|This clears level progress, level saves and unlocked rewards. Custom layouts, level designs and settings are kept.|Se borrarán el progreso, las partidas de niveles y las recompensas. Se conservarán los diseños personalizados, los niveles y los ajustes.|La progression, les sauvegardes de niveaux et les récompenses seront effacées. Les agencements personnalisés, les conceptions et les paramètres seront conservés.
+确认重置|Confirm reset|Confirmar reinicio|Confirmer la réinitialisation
+编辑当前关卡时保留当前布置|Editing the current level keeps its current layout|Editar el nivel actual conserva su distribución|Modifier le niveau actuel conserve son agencement
+其他关卡从初始场景开始|Other levels start from their initial scene|Los demás niveles parten de su escena inicial|Les autres niveaux partent de leur scène initiale
+编辑当前关卡时保留当前布置，其他关卡从初始场景开始。|Editing the current level keeps its layout; other levels start from their initial scene.|El nivel actual conserva su distribución; los demás parten de su escena inicial.|Le niveau actuel conserve son agencement ; les autres partent de leur scène initiale.
+导出场景配置|Export scene configuration|Exportar configuración de escenas|Exporter la configuration des scènes
+保存关卡场景|Save level scene|Guardar escena del nivel|Enregistrer la scène du niveau
+重置失败|Reset failed|Error al reiniciar|Échec de la réinitialisation
+重置失败，请检查浏览器存储空间|Reset failed. Check browser storage.|Error al reiniciar. Comprueba el almacenamiento del navegador.|Échec de la réinitialisation. Vérifiez le stockage du navigateur.
 返回首页|Return home|Volver al inicio|Retour à l’accueil
 游戏工具|Game tools|Herramientas del juego|Outils du jeu
 重置当前场景|Reset current scene|Restablecer la escena actual|Réinitialiser la scène actuelle

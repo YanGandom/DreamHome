@@ -14,7 +14,7 @@ const foundationColors=[ORIGINAL_FOUNDATION_COLOR,...colors];
 export function addWallCrown(parent,width,height,material){
   const root=new THREE.Group();root.name='WhiteWallCrown';parent.add(root);
   const white=material('#fff9ef');
-  for(const [h,d,y]of [[.12,.28,height-.18],[.12,.36,height-.06]]){const mesh=new THREE.Mesh(new THREE.BoxGeometry(width,h,d),white);mesh.position.y=y;mesh.castShadow=mesh.receiveShadow=true;root.add(mesh)}
+  for(const [h,d,y]of [[.12,.28,height-.18],[.12,.36,height-.06]]){const mesh=new THREE.Mesh(new THREE.BoxGeometry(width+(d===.28?.02:.04),h,d),white);mesh.position.y=y;mesh.castShadow=mesh.receiveShadow=true;root.add(mesh)}
   return root;
 }
 
@@ -49,7 +49,7 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
   function group(id,type){const g=new THREE.Group();root.add(g);tag(g,id,type);return g}
   function wallBounds(w){const halfX=Math.abs(Math.cos(w.angle))*w.width/2+Math.abs(Math.sin(w.angle))*.1,halfZ=Math.abs(Math.sin(w.angle))*w.width/2+Math.abs(Math.cos(w.angle))*.1;return{minX:w.x-halfX,maxX:w.x+halfX,minZ:w.z-halfZ,maxZ:w.z+halfZ}}
   function wallProxy(w){const root=new THREE.Group();root.position.set(w.x,0,w.z);root.rotation.y=w.angle;return{id:w.id,root,lengthAxis:'x',localBounds:new THREE.Box3(new THREE.Vector3(-w.width/2,0,-.1),new THREE.Vector3(w.width/2,state.height,.1))}}
-  function validWall(w,replacement=null){if(w.supportId)return system.architecture.stacking.fits(wallProxy(w),system.get(w.supportId));const b=wallBounds(w),owners=w.rooms.map(id=>id===replacement?.id?replacement:room(id)).filter(Boolean);return owners.some(r=>inside(b,boxOf(r)))||corners(b).every(([x,z])=>owners.some(r=>pointInside(x,z,r)))}
+  function validWall(w,replacement=null){if(w.supportId)return system.architecture.stacking.fits(wallProxy(w),system.get(w.supportId));if(!w.rooms.length)return [w.x,w.z,w.width,w.angle].every(Number.isFinite)&&Math.abs(w.x)<=65&&Math.abs(w.z)<=65;const b=wallBounds(w),owners=w.rooms.map(id=>id===replacement?.id?replacement:room(id)).filter(Boolean);return owners.some(r=>inside(b,boxOf(r)))||corners(b).every(([x,z])=>owners.some(r=>pointInside(x,z,r)))}
   function corners(b){return[[b.minX,b.minZ],[b.maxX,b.minZ],[b.minX,b.maxZ],[b.maxX,b.maxZ]]}
   function pointInside(x,z,r){const b=boxOf(r);return x>=b.minX-.001&&x<=b.maxX+.001&&z>=b.minZ-.001&&z<=b.maxZ+.001}
   function furnitureIn(r){return system.all().filter(f=>{
@@ -64,7 +64,7 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
     if(Math.abs(r.x)>65||Math.abs(r.z)>65)return fail('请在建筑附近添加房间');
     const b=boxOf(r);if(r.level===1&&fixedAreas.some(a=>overlap(b,boxOf(a))))return fail('地基不能与现有建筑重叠');
     if(state.rooms.some(other=>other.id!==r.id&&other.level===r.level&&overlap(b,boxOf(other))))return fail('同层房间不能重叠');
-    if(r.level===2&&!supported(r))return fail('二楼楼板需要完全落在一楼地基上');
+
     if(previous){
       const dx=r.x-previous.x,dz=r.z-previous.z,resizing=r.width!==previous.width||r.depth!==previous.depth;
       if(!resizing&&(dx||dz)&&state.walls.some(w=>w.rooms.includes(r.id)&&w.rooms.length>1))return fail('房间有共墙，请先调整共墙');
@@ -72,7 +72,7 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
       for(const w of state.walls.filter(w=>w.rooms.includes(r.id))){const moved=resizing?w:{...w,x:w.x+dx,z:w.z+dz};if(!w.supportId&&!validWall(moved,r))return fail('地基边缘已碰到墙壁');}
       if(resizing&&roomWalls(previous.id).some(f=>!system.architecture.validWall(f,r)))return fail('地基边缘已碰到组件墙壁');
       if(resizing)for(const f of furnitureIn(previous)){const fb=new THREE.Box3().setFromObject(f.root);if(!inside({minX:fb.min.x,maxX:fb.max.x,minZ:fb.min.z,maxZ:fb.max.z},b))return fail('先移动边缘的家具，再缩小地基')}
-      if(previous.level===1&&state.rooms.some(upper=>upper.level===2&&overlap(boxOf(upper),boxOf(previous))&&!supported(upper,r)))return fail('上层房间仍需要这块地基支撑');
+
     }return true;
   }
   function supported(r,replacement=null){
@@ -105,7 +105,7 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
     if(![r.x,r.z,r.width,r.depth].every(Number.isFinite)||Math.abs(r.x)>65||Math.abs(r.z)>65||r.width<1||r.depth<1||r.width>20||r.depth>20)return fail('铺装长宽需要在 1–20 米之间');
     if(state.rooms.some(room=>room.level===1&&overlap(boxOf(r),boxOf(room))))return fail('请把室外铺装放在房间地基外');
     if(state.pavings.some(other=>other.id!==r.id&&overlap(boxOf(r),boxOf(other))))return fail('铺装区域不能相互重叠');
-    const b=boxOf(r);if(system.placement)for(const x of [b.minX+.01,(b.minX+b.maxX)/2,b.maxX-.01])for(const z of [b.minZ+.01,(b.minZ+b.maxZ)/2,b.maxZ-.01]){const hit=system.placement.supportAt(x,z,GROUND_TOP+.01,'__paving__');if(!hit?.object||hit.id!=='outdoor')return fail('铺装需要落在室外地面上')}
+
     return true;
   }
   function addPaving(point,family='tiles'){if(system.canAdd&&!system.canAdd())return fail('场景最多摆放 200 件物件，请先删除一些物件');
@@ -128,7 +128,7 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
     const before=clone(state),furniture=[...roomWalls(id),...furnitureIn(r)].map(f=>({f,position:f.root.position.clone(),angle:f.root.rotation.y}));
     for(const w of state.walls.filter(w=>w.rooms.includes(id))){const x=w.x-r.x,z=w.z-r.z;w.x=r.x+z;w.z=r.z-x;w.angle+=Math.PI/2}
     [r.width,r.depth]=[r.depth,r.width];
-    if(!validateRoom(r)||state.walls.some(w=>w.rooms.includes(id)&&!validWall(w))||state.rooms.some(v=>v.level===2&&!supported(v))){state=before;return fail('旋转后的房间没有足够空间')}
+    if(!validateRoom(r)||state.walls.some(w=>w.rooms.includes(id)&&!validWall(w))){state=before;return fail('旋转后的房间没有足够空间')}
     for(const {f,position,angle}of furniture){const x=position.x-r.x,z=position.z-r.z;f.root.position.set(r.x+z,position.y,r.z-x);f.root.rotation.y=angle+Math.PI/2;f.root.updateMatrixWorld(true)}
     for(const d of state.decorations.filter(d=>d.roomId===id)){[d.u,d.v]=[d.v,-d.u]}redraw();return true;
   }
@@ -138,14 +138,22 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
     if(same){if(!same.rooms.includes(roomId)){same.rooms.push(roomId);same.x=(same.x+w.x)/2;same.z=(same.z+w.z)/2}redraw();return same.id}
     if(!validWall(w))return fail('墙壁不能超出地基');state.walls.push(w);redraw();return w.id;
   }
-  function updateWall(id,patch){const w=wall(id);if(!w)return false;const candidate={...w,...patch};if(candidate.width<1||candidate.width>24||!validWall(candidate))return fail('墙壁已到地基边缘');
+  function snapWall(w){
+    const r=state.rooms.filter(r=>pointInside(w.x,w.z,r)).sort((a,b)=>height(b)-height(a))[0];
+    if(!r){w.rooms=[];w.elevation=GROUND_TOP+.01;return w}
+    const dx=w.x-r.x,dz=w.z-r.z,side=r.width/2-Math.abs(dx)<r.depth/2-Math.abs(dz),sign=(side?dx:dz)<0?-1:1;
+    w.width=Math.min(w.width,side?r.depth:r.width);w.angle=side?Math.PI/2:0;w.rooms=[r.id];delete w.elevation;
+    if(side){w.x=r.x+sign*(r.width/2-.1);w.z=THREE.MathUtils.clamp(w.z,r.z-r.depth/2+w.width/2,r.z+r.depth/2-w.width/2)}else{w.z=r.z+sign*(r.depth/2-.1);w.x=THREE.MathUtils.clamp(w.x,r.x-r.width/2+w.width/2,r.x+r.width/2-w.width/2)}return w;
+  }
+  function addFreeWall(point){if(system.canAdd&&!system.canAdd())return fail('场景最多摆放 200 件物件');const w=snapWall({id:next('wall'),type:'wall',rooms:[],x:point.x,z:point.z,width:3,angle:0,color:'#eee1cb',style:'plaster'});if(!validWall(w))return false;state.walls.push(w);redraw();return w.id}
+  function updateWall(id,patch){const w=wall(id);if(!w)return false;const candidate={...w,...patch};if(!w.supportId&&patch.width===undefined&&patch.angle===undefined&&(patch.x!==undefined||patch.z!==undefined))snapWall(candidate);if(candidate.width<1||candidate.width>24||!validWall(candidate))return fail('墙壁已到地基边缘');
     if(candidate.width<system.architecture.minimumLength(id))return fail('先调整墙上的装饰，再缩短墙壁');
     if(state.doors.some(d=>d.wallId===id&&(Math.abs(d.offset)+d.width/2+.1>candidate.width/2)))return fail('先移动门洞，再缩短墙壁');
     Object.assign(w,candidate);if(w.supportId){const proxy=wallProxy(w);proxy.dynamic=true;proxy.data=w;system.architecture.stacking.bind(proxy,system.get(w.supportId))}redraw();return true;
   }
   function addStackedWall(baseId){if(system.canAdd&&!system.canAdd())return fail('场景最多摆放 200 件物件，请先删除一些物件');
     const base=system.get(baseId);if(base?.kind!=='wall'||!base.root.visible)return fail('请选择墙顶');
-    const owners=base.dynamic?base.data.rooms:wallOwners(base).map(r=>r.id);if(!owners.length)return fail('下方墙壁需要地基支撑');
+    const owners=base.dynamic?base.data.rooms:wallOwners(base).map(r=>r.id);
     const w={id:next('wall'),type:'wall',rooms:[...owners],x:base.root.position.x,z:base.root.position.z,angle:0,width:Math.min(3,base.localBounds.getSize(new THREE.Vector3())[base.lengthAxis]*base.root.scale[base.lengthAxis]),color:'#eee1cb',style:'plaster'};
     const proxy=wallProxy(w);proxy.dynamic=true;proxy.data=w;
     if(!system.architecture.stacking.pose(proxy,base,base.root.position.clone()))return fail('墙顶没有足够空间');
@@ -168,7 +176,7 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
     // Removing a supporting foundation also removes the rooms directly above it.
     for(const lower of rooms)for(const upper of state.rooms)if(upper.level>lower.level&&overlap(boxOf(upper),boxOf(lower))&&!rooms.includes(upper))rooms.push(upper);
     const roomIds=new Set(rooms.map(r=>r.id));
-    const walls=state.walls.filter(w=>w.rooms.every(id=>roomIds.has(id)));
+    const walls=state.walls.filter(w=>w.rooms.length&&w.rooms.every(id=>roomIds.has(id)));
     const wallIds=new Set(walls.map(w=>w.id));
     const furniture=system.all().filter(f=>{
       if(!f.root.visible)return false;
@@ -236,7 +244,7 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
       }
     }
     for(const w of state.walls){
-      const r=room(w.rooms[0]);if(!r)continue;const g=group(w.id,'wall');g.position.set(w.x,height(r),w.z);g.rotation.y=w.angle;
+      const r=room(w.rooms[0]);const g=group(w.id,'wall');g.position.set(w.x,w.elevation??(r?height(r):GROUND_TOP+.01),w.z);g.rotation.y=w.angle;
       const m=material(w.color),bodyHeight=state.height-.12,ds=state.doors.filter(d=>d.wallId===w.id).sort((a,b)=>a.offset-b.offset);let start=-w.width/2;
       for(const d of ds){const left=d.offset-d.width/2,right=d.offset+d.width/2;box(g,left-start,bodyHeight,.2,(start+left)/2,bodyHeight/2,0,m);box(g,d.width,bodyHeight-d.height,.2,d.offset,(bodyHeight+d.height)/2,0,m);start=right}
       box(g,w.width/2-start,bodyHeight,.2,(start+w.width/2)/2,bodyHeight/2,0,m);
@@ -292,7 +300,7 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
   function editable(record){if(!['1','2'].includes(view)||record.kind==='wall')return true;const level=record.level||(record.root.position.y>=3.6?2:1);return level===Number(view)}
   const getModel=id=>models.get(id)||null;
   function collisionBoxes(){const out=[];for(const w of wallRecords.values()){w.root.updateWorldMatrix(true,true);w.root.traverse(o=>{if(o.isMesh)out.push(new THREE.Box3().setFromObject(o))})}return out}
-  const api={paving,outdoorStyles,addPaving,updatePaving,rotatePaving,validPaving,animate:t=>animateOutdoorPlots(root,t),componentDefaults:!!defaults.length,root,ground,groundPlot,groundAt,addGround,updateGround,rotateGround,validGround,limits:BUILD_LIMITS,colors,foundationColors,all:()=>state.rooms,find,room,wall,door,getModel,getWall:id=>wallRecords.get(id)||null,wallRecords:()=>[...wallRecords.values()],height,roofY,boxOf,pointInside,snapRoom,canPlaceRoom:validateRoom,addRoom,addUpper,upperDraft,updateRoom,rotateRoom,addWall,addStackedWall,removeStackedOn,updateWall,setHeight,addDoor,updateDoor,setRoof,addDecoration,remove,removalContents,removeFoundation,color,setStyle,rotateFloor,redraw,serialize,load,validWall,collisionBoxes,setView,applyView,editable,get view(){return view},get lastError(){return lastError},get state(){return state}};
+  const api={paving,outdoorStyles,addPaving,updatePaving,rotatePaving,validPaving,animate:t=>animateOutdoorPlots(root,t),componentDefaults:!!defaults.length,root,ground,groundPlot,groundAt,addGround,updateGround,rotateGround,validGround,limits:BUILD_LIMITS,colors,foundationColors,all:()=>state.rooms,find,room,wall,door,getModel,getWall:id=>wallRecords.get(id)||null,wallRecords:()=>[...wallRecords.values()],height,roofY,boxOf,pointInside,snapRoom,canPlaceRoom:validateRoom,addRoom,addUpper,upperDraft,updateRoom,rotateRoom,addWall,addFreeWall,addStackedWall,removeStackedOn,updateWall,setHeight,addDoor,updateDoor,setRoof,addDecoration,remove,removalContents,removeFoundation,color,setStyle,rotateFloor,redraw,serialize,load,validWall,collisionBoxes,setView,applyView,editable,get view(){return view},get lastError(){return lastError},get state(){return state}};
   if(defaults.length)load(null);
   return api;
 }

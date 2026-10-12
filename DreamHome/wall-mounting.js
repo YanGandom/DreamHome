@@ -29,7 +29,7 @@ export function createWallMounting(system){
     return r.localBounds.clone().applyMatrix4(transform);
   }
   function wallPatches(w){
-    let cached=patches.get(w.root);if(cached)return cached;
+    let cached=patches.get(w.root);if(cached?.signature===w.root.userData.wallDetailRevision&&cached?.values)return cached.values;
     cached=[];w.root.updateWorldMatrix(true,true);const inverse=w.root.matrixWorld.clone().invert(),d=depth(w),along=axis(w);
     w.root.traverse(mesh=>{
       if(!mesh.isMesh)return;
@@ -40,7 +40,7 @@ export function createWallMounting(system){
         n.subVectors(b,a).cross(edge.subVectors(c,a)).normalize();if(Math.abs(n[d])<.8)continue;
         cached.push({sign:Math.sign(n[d]),lo:Math.min(a[along],b[along],c[along]),hi:Math.max(a[along],b[along],c[along]),bottom:Math.min(a.y,b.y,c.y),top:Math.max(a.y,b.y,c.y),near:Math.min(a[d],b[d],c[d]),far:Math.max(a[d],b[d],c[d])});
       }
-    });patches.set(w.root,cached);return cached;
+    });patches.set(w.root,{signature:w.root.userData.wallDetailRevision,values:cached});return cached;
   }
   // Use the finish under the object's footprint, not the bounding box of a
   // remote cornice/pillar. Raised panelling is a real supporting surface too.
@@ -64,7 +64,8 @@ export function createWallMounting(system){
     // Keep stable serialized floats when loading a layout repeatedly.
     for(const component of ['x','y','z'])if(Math.abs(position[component]-r.root.position[component])>1e-9)r.root.position[component]=position[component];
     r.root.rotation.y=w.root.rotation.y+rotation;r.root.updateMatrixWorld(true);
-    r.mount={wallId:w.id,type:'face',side:'interior',faceSign:f.sign,...(f.roomId?{roomId:f.roomId}:{}),local:p.toArray(),rotation};
+    const local=p.toArray();if(r.mount?.wallId===w.id)for(let i=0;i<3;i++)if(Math.abs(local[i]-r.mount.local[i])<1e-9)local[i]=r.mount.local[i];
+    r.mount={wallId:w.id,type:'face',side:'interior',faceSign:f.sign,...(f.roomId?{roomId:f.roomId}:{}),local,rotation};
     return true;
   }
   function move(r,point,wallId=r.mount?.wallId||r.mountWallId,sign){

@@ -32,22 +32,23 @@ export function createProgression({catalog,options,storage,onChange=()=>{},messa
   for(const x of unique.slice().reverse())if(finishes.length<Math.floor(unique.length/3)&&!safe.has(x)&&!finishes.includes(x))finishes.push(x);
   finishes.splice(Math.floor(unique.length/3));
   const optionAchievements=new Map(finishes.map((x,i)=>[x,ACHIEVEMENTS[i%ACHIEVEMENTS.length]]));
-  const seen=new Set(state.seen);
+  let authoring=false;const seen=new Set(state.seen);
   function save(){state.seen=[...seen];try{storage.setItem(PROGRESS_KEY,JSON.stringify(state))}catch{message('进度无法保存，请检查浏览器存储空间')}onChange()}
   const achieved=a=>(state.counts[a.metric]||0)>=a.target;
-  function allowed(id){const level=propLevels.get(id);return !!state.unlockAll||!level||state.completed.includes(level)}
-  function finishAllowed(id){const a=optionAchievements.get(id);return !!state.unlockAll||!a||achieved(a)}
+  function allowed(id){const level=propLevels.get(id);return authoring||!!state.unlockAll||!level||state.completed.includes(level)}
+  function finishAllowed(id){const a=optionAchievements.get(id);return authoring||!!state.unlockAll||!a||achieved(a)}
   function hint(id,finish=false){const a=optionAchievements.get(id);return finish&&a?`成就「${a.name}」：${METRICS[a.metric]} ${a.target} 次（${Math.min(state.counts[a.metric]||0,a.target)}/${a.target}）`: `通关第 ${propLevels.get(id)} 关后获得此道具`}
   function check(id,finish=false){const ok=finish?finishAllowed(id):allowed(id);if(!ok)message(hint(id,finish));return ok}
-  function complete(id){if(!Number.isInteger(id)||id<1||id>21||state.completed.includes(id)||!state.unlockAll&&id>1&&!state.completed.includes(id-1))return false;state.completed.push(id);state.counts.levels=state.completed.length;save();return true}
-  function redeem(code){if(code==='Asi'){state.unlockAll=true;save();return 'unlock'}if(code==='AsiDesign'){state.designUnlocked=true;save();return 'design'}return false}
+  function complete(id){if(authoring||!Number.isInteger(id)||id<1||id>21||state.completed.includes(id)||!state.unlockAll&&id>1&&!state.completed.includes(id-1))return false;state.completed.push(id);state.counts.levels=state.completed.length;save();return true}
+  function resetProgress(){state.completed=[];state.counts={};state.seen=[];state.unlockAll=false;seen.clear();save()}
+  function redeem(code){if(code==='AsiScene'){state.sceneUnlocked=true;save();return 'scene'}if(code==='Asi'){state.unlockAll=true;save();return 'unlock'}if(code==='AsiDesign'){state.designUnlocked=true;save();return 'design'}return false}
   function setRewards(level,ids){
     if(!Number.isInteger(level)||level<1||level>21||!Array.isArray(ids)||ids.length!==2||ids[0]===ids[1]||ids.some(id=>!locked.some(r=>r.id===id)))return false;
     ids.forEach((id,slot)=>{let row,index;rewards.forEach((rs,i)=>{const j=rs.findIndex(r=>r.id===id);if(j>=0){row=i;index=j}});[rewards[level-1][slot],rewards[row][index]]=[rewards[row][index],rewards[level-1][slot]]});
     state.rewardIds=rewards.map(rs=>rs.map(r=>r.id));mapRewards();save();return true;
   }
   function record(before,after,lookup,scope){
-    const prev=new Map(entities(before).map(x=>[x.id,x]));let changed=false;
+    if(authoring)return;const prev=new Map(entities(before).map(x=>[x.id,x]));let changed=false;
     const add=(metric,key)=>{key=scope+':'+metric+':'+key;if(seen.has(key))return;seen.add(key);state.counts[metric]=(state.counts[metric]||0)+1;changed=true};
     for(const v of entities(after)){if(v.visible===false)continue;const p=prev.get(v.id),info=lookup(v.sourceId)||{};
       if(!p||p.visible===false){add('placements',v.id);if(info.category==='lighting')add('lights',v.id)}
@@ -56,7 +57,7 @@ export function createProgression({catalog,options,storage,onChange=()=>{},messa
         if((p.floorStyle||p.style||p.wallMaterial)!==(v.floorStyle||v.style||v.wallMaterial))add('patterns',v.id+':'+(v.floorStyle||v.style||v.wallMaterial));}
     }if(changed)save();
   }
-  return{state,rewards,locked,initialRewards,options:unique,finishes,optionAchievements,achieved,allowed,finishAllowed,hint,check,complete,record,redeem,setRewards,allLevelsAvailable:()=>!!state.unlockAll||Array.from({length:20},(_,i)=>i+1).every(id=>state.completed.includes(id)),levelAvailable:id=>Number.isInteger(id)&&id>=1&&id<=21&&(!!state.unlockAll||id===1||state.completed.includes(id-1))};
+  return{resetProgress,setAuthoring:value=>{authoring=!!value;onChange()},state,rewards,locked,initialRewards,options:unique,finishes,optionAchievements,achieved,allowed,finishAllowed,hint,check,complete,record,redeem,setRewards,allLevelsAvailable:()=>!!state.unlockAll||Array.from({length:20},(_,i)=>i+1).every(id=>state.completed.includes(id)),levelAvailable:id=>Number.isInteger(id)&&id>=1&&id<=21&&(!!state.unlockAll||id===1||state.completed.includes(id-1))};
 }
 export function entities(layout){return[...(layout.items||[]),...['rooms','grounds','pavings','walls','doors','decorations'].flatMap(k=>layout.building?.[k]||[])]}
 export function decorateLock(button,progress,id,finish=false){

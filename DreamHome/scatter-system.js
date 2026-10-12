@@ -40,7 +40,7 @@ export function createScatterSystem({scene,system}){
     for(let l=0;l<pieceLayers(t.id,3);l++)for(let i=0;i<7;i++){piece(t.id,0,0,l,i,0,3);const mesh=new THREE.Mesh(geometries[t.id],materials[t.id].clone());mesh.material.color.copy(color);mesh.position.copy(transform.position);mesh.rotation.copy(transform.rotation);mesh.scale.copy(transform.scale);model.add(mesh)}
     return{id:'scatter-'+t.id,sourceId:'scatter-'+t.id,name:t.name,category:'props',scatterType:t.id,root:model};
   });
-  function isGround(hit){return hit?.id==='outdoor'&&!!hit.object&&(!hit.record||hit.record.category==='paving')&&!system.construction?.all().some(r=>system.construction.pointInside(hit.point.x,hit.point.z,r))}
+  function isGround(hit){return hit?.id==='outdoor'&&(!hit.record||hit.record.category==='paving')&&!system.construction?.all().some(r=>system.construction.pointInside(hit.point.x,hit.point.z,r))}
   function pick(raycaster){const mask=raycaster.layers.mask;raycaster.layers.enableAll();const hit=system.placement?.pickSurface(raycaster,'__scatter__');raycaster.layers.mask=mask;return isGround(hit)?hit.point:null}
   function support(x,z,radius=.245){
     const key=x+':'+z+':'+radius;if(supportCache.has(key))return supportCache.get(key);

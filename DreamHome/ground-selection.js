@@ -34,7 +34,7 @@ export function createGroundSelection(scene,name='GroundSelection'){
       root.position.set(center.x,floor,center.z);root.rotation.y=record.root.rotation.y;
       fill.scale.set(size.x+.2,1,size.z+.2);border.scale.copy(fill.scale);
     }
-    if(record.kind==='mounted'){
+    if(record.kind==='mounted'&&!record.detached){
       const wallAngle=record.root.rotation.y+(record.mountWallId==='wall-3'?Math.PI/2:0),normal=new THREE.Vector3(Math.sin(wallAngle),0,Math.cos(wallAngle));
       root.rotation.set(Math.PI/2,wallAngle,0,'YXZ');root.position.copy(bounds.getCenter(new THREE.Vector3())).addScaledVector(normal,Math.min(bounds.max.x-bounds.min.x,bounds.max.z-bounds.min.z)/2+.025);
       const width=record.mountWallId==='wall-3'?record.localBounds.max.z-record.localBounds.min.z:record.localBounds.max.x-record.localBounds.min.x;

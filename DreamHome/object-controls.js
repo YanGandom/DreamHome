@@ -176,7 +176,7 @@ export function createObjectControls({scene,camera,renderer,controls,system,occl
     if(mode==='move'&&id&&id===selectedId){
       event.preventDefault();event.stopImmediatePropagation();press=null;const record=active();
       setRay(event);const support=system.placement?.pick(raycaster,id)||hit.point;
-      const mounted=record.kind==='mounted',plane=mounted?new THREE.Plane().setFromNormalAndCoplanarPoint(system.architecture.normal(system.get(record.mount?.wallId||record.mountWallId)),record.root.position):new THREE.Plane(new THREE.Vector3(0,1,0),-hit.point.y);
+      const mounted=record.kind==='mounted'&&!record.detached,plane=mounted?new THREE.Plane().setFromNormalAndCoplanarPoint(system.architecture.normal(system.get(record.mount?.wallId||record.mountWallId)),record.root.position):new THREE.Plane(new THREE.Vector3(0,1,0),-hit.point.y);
       const grab=mounted?raycaster.ray.intersectPlane(plane,new THREE.Vector3())||support:support;
       moving={id,mounted,beforeScatter:record.kind==='scatter'?system.scatter.serialize():null,beforeSurface:record.surface,beforeMount:record.mount?structuredClone(record.mount):null,axis:arrowHit?.object.userData.moveAxis||null,pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,moved:false,before:record.root.position.clone(),controlsEnabled:controls.enabled,plane,offset:record.root.position.clone().sub(grab)};
       controls.enabled=false;canvas.setPointerCapture(event.pointerId);return;
@@ -192,7 +192,7 @@ export function createObjectControls({scene,camera,renderer,controls,system,occl
       if(moving.resize){(system.get(moving.id)?.railing?system.resizeRailingPreview:system.resizeWallPreview)(moving.id,moving.resize.edge,wallHandles.delta(moving.resize,raycaster,event),moving.resize);return}
       if(moving.mounted){const p=raycaster.ray.intersectPlane(moving.plane,new THREE.Vector3());if(p){p.add(moving.offset);if(moving.axis==='z'){p.x=moving.before.x;p.z=moving.before.z}else if(moving.axis==='x')p.y=moving.before.y;system.movePreview(moving.id,p.x,p.z,p.y)}return}
       const point=system.placement?system.placement.pick(raycaster,moving.id):raycaster.ray.intersectPlane(moving.plane,new THREE.Vector3());
-      if(point){const x=moving.axis==='z'?moving.before.x:point.x+moving.offset.x,z=moving.axis==='x'?moving.before.z:point.z+moving.offset.z,y=system.placement?.heightAt(x,z,point.y,moving.id);system.movePreview(moving.id,x,z,y,false,point.wallId)}return;
+      if(point){const x=moving.axis==='z'?moving.before.x:point.x+moving.offset.x,z=moving.axis==='x'?moving.before.z:point.z+moving.offset.z,y=system.placement?.heightAt(x,z,point.y,moving.id);system.movePreview(moving.id,x,z,y,false,moving.mounted?point.wallId:system.get(moving.id)?.detached?null:point.wallId)}return;
     }
     if(press?.pointerId===event.pointerId&&Math.hypot(event.clientX-press.x,event.clientY-press.y)>TAP_DISTANCE)press.moved=true;
     if(!enabled||event.buttons||event.pointerType==='touch'||performance.now()-lastHover<140)return;

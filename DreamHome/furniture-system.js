@@ -1,3 +1,4 @@
+import {syncWallDetails} from './wall-details.js';
 import {OBJECT_LIMIT,constructionCount,limitLayout} from './game-rules.js';
 import {WOOD_FINISHES,applyWoodFinish,rebuildRailing} from './railing-system.js';
 import * as THREE from './vendor/three.module.js';
@@ -17,8 +18,10 @@ export function createFurnitureSystem({scene,specs,mergeGeometries,floorSystem=n
     const anchor=spec.anchor?.clone()||new THREE.Vector3((bounds.min.x+bounds.max.x)/2,bounds.min.y,(bounds.min.z+bounds.max.z)/2);
     const collisionBounds=spec.kind==='wall'&&!spec.wallTop?new THREE.Box3().setFromObject(spec.meshes[0]).translate(anchor.clone().negate()):null;
     const root=new THREE.Group();root.name=spec.name;root.position.copy(anchor);root.userData.furnitureId=spec.id;
+    const panelMeshes=spec.meshes.filter(mesh=>mesh.userData.wainscot),panelBounds=new THREE.Box3();for(const mesh of panelMeshes)panelBounds.expandByObject(mesh);
     const buckets=new Map();
     for(const mesh of spec.meshes){
+      if(mesh.userData.wainscot||mesh.userData.wallPier!==undefined){mesh.removeFromParent();continue}
       const geometry=mesh.geometry.clone().applyMatrix4(mesh.matrixWorld).translate(-anchor.x,-anchor.y,-anchor.z);
       const g=geometry.index?geometry.toNonIndexed():geometry;
       if(g!==geometry)geometry.dispose();
@@ -46,25 +49,32 @@ export function createFurnitureSystem({scene,specs,mergeGeometries,floorSystem=n
     const surface=anchor.y>3?'floor-2':anchor.y<.7?'outdoor':'floor-1';
     const localBounds=bounds.clone().translate(anchor.clone().negate());
     const record={id:spec.id,sourceId:spec.id,name:spec.name,category:spec.category,catalogId:spec.catalogId||spec.id,catalogName:spec.catalogName||spec.name,root,paint,surface,localBounds,color:null,exists:true,initial:anchor.clone(),initialRotation:0,kind:spec.kind||'furniture',lengthAxis:spec.lengthAxis,wallTop:spec.wallTop,mountWallId:spec.mountWallId,mount:null,wallMaterial:null};
+    record.collisionBounds=collisionBounds;
+    if(panelMeshes.length){const center=panelBounds.getCenter(new THREE.Vector3()).sub(anchor);center.y=0;center[spec.lengthAxis==='z'?'x':'z']-=spec.lengthAxis==='z'?.0385:.0385;record.wainscot={center:center.toArray(),bottom:panelBounds.min.y-anchor.y,width:panelBounds.getSize(new THREE.Vector3())[spec.lengthAxis]-.02};syncWallDetails(record)}
+    record.wallPiers=[...new Set(spec.meshes.filter(m=>m.userData.wallPier!==undefined).map(m=>m.userData.wallPier))].map(x=>x-anchor.x);
     record.woodFinish=spec.category==='stairs';record.railing=spec.id==='balcony-railing';if(record.railing){record.lengthAxis='x';record.railingHeight=localBounds.max.y;record.defaultRailingWidth=localBounds.max.x-localBounds.min.x;rebuildRailing(record,record.defaultRailingWidth)}if(record.woodFinish)applyWoodFinish(record,null);
     records.set(record.id,record);
     if(record.railing)record.category='railings';
     record.collisionBounds=collisionBounds;
     record.interiorSign=spec.interiorSign||1;
     const templateRoot=root.clone(true);cloneMaterials(templateRoot);
-    if(record.kind==='wall'){record.root.scale.y=Math.min(1,6/localBounds.getSize(new THREE.Vector3()).y);templateRoot.scale.y=record.root.scale.y}templates.set(record.id,{...record,root:templateRoot,paint:null});
+    if(record.kind==='wall'){record.root.scale.y=Math.min(1,6/localBounds.getSize(new THREE.Vector3()).y);templateRoot.scale.y=record.root.scale.y}syncWallDetails(record);const template={...record,root:templateRoot,paint:null};syncWallDetails(template);templates.set(record.id,template);
   }
   let initialState=serialize();
   const catalogGroups=new Map();
   for(const template of templates.values()){
     if(!catalogGroups.has(template.catalogId)){
       const representative=templates.get(template.catalogId)||template;
-      const preview=representative.kind==='wall'?representative.root.clone(true):representative.root;if(representative.kind==='wall')preview.scale[representative.lengthAxis]=3/representative.localBounds.getSize(new THREE.Vector3())[representative.lengthAxis];
+      const preview=representative.kind==='wall'?representative.root.clone(true):representative.root;if(representative.kind==='wall')preview.scale[representative.lengthAxis]=3/representative.localBounds.getSize(new THREE.Vector3())[representative.lengthAxis];if(representative.wainscot)syncWallDetails({...representative,root:preview});
       catalogGroups.set(template.catalogId,{...representative,root:preview,name:representative.catalogName,searchNames:[representative.catalogName]});
     }
     catalogGroups.get(template.catalogId).searchNames.push(template.name);
   }
   const catalog=()=>[...catalogGroups.values()];
+  function registerLooseTemplate(source){
+    const id='loose-'+source.tool,root=source.root.clone(true);root.position.set(0,0,0);cloneMaterials(root);const paint=[];root.traverse(o=>{o.userData.furnitureId=id;if(o.isMesh){o.material.userData.editablePaint=true;o.material.userData.baseColor='#'+o.material.color.getHexString();paint.push(o.material)}});root.updateMatrixWorld(true);
+    const bounds=new THREE.Box3().setFromObject(root);templates.set(id,{id,sourceId:id,catalogId:'tool-'+source.tool,name:source.name,root,paint,kind:'furniture',category:source.tool==='door'?'doors':source.tool==='chimney'?'decor':'roofs',localBounds:bounds,color:null,exists:true,initial:new THREE.Vector3(0,.15-bounds.min.y,0),surface:'outdoor',mount:null});
+  }
   function addRewardSuites(){
     if(templates.has('suite-1'))return;
     const seats=catalog().filter(r=>r.category==='seating'&&r.kind==='furniture'),extras=catalog().filter(r=>['tables','plants','lighting','rugs'].includes(r.category)&&r.kind==='furniture');
@@ -81,12 +91,12 @@ export function createFurnitureSystem({scene,specs,mergeGeometries,floorSystem=n
   function canAdd(count=1){return objectCount()+count<=OBJECT_LIMIT}
   function all(){return [...records.values()].filter(r=>r.exists)}
   function get(id){const r=records.get(id);return r?.exists?r:construction?.getWall(id)||scatter?.get(id)||null}
-  function serialize(){return {version:1,surfaceGap:SURFACE_GAP,items:all().map(r=>({id:r.id,sourceId:r.sourceId,position:r.root.position.toArray(),rotation:r.root.rotation.y,color:r.color,visible:r.root.visible,surface:r.surface,...(r.kind==='wall'?{lengthScale:r.root.scale[r.lengthAxis],heightScale:r.root.scale.y,wallMaterial:r.wallMaterial}:{}),...(r.sourceId==='stair-entrance'?{entranceFinishVersion:1}:{}),...(r.railing?{railingWidth:r.railingWidth}:{}),...(r.mount?{mount:structuredClone(r.mount)}:{})})),...(floorSystem?{floors:floorSystem.serialize()}:{}),...(construction?{building:construction.serialize()}:{}),...(scatter?{scatter:scatter.serialize()}:{})}}
+  function serialize(){return {version:1,surfaceGap:SURFACE_GAP,items:all().map(r=>({id:r.id,sourceId:r.sourceId,position:r.root.position.toArray(),rotation:r.root.rotation.y,color:r.color,visible:r.root.visible,surface:r.surface,...(r.detached?{detached:true}:{}),...(r.kind==='wall'?{lengthScale:r.root.scale[r.lengthAxis],heightScale:r.root.scale.y,wallMaterial:r.wallMaterial}:{}),...(r.sourceId==='stair-entrance'?{entranceFinishVersion:1}:{}),...(r.railing?{railingWidth:r.railingWidth}:{}),...(r.mount?{mount:structuredClone(r.mount)}:{})})),...(floorSystem?{floors:floorSystem.serialize()}:{}),...(construction?{building:construction.serialize()}:{}),...(scatter?{scatter:scatter.serialize()}:{})}}
   function createCopy(sourceId,id){
     const template=templates.get(sourceId);if(!template)return null;
     const root=template.root.clone(true);cloneMaterials(root);root.userData.furnitureId=id;
     const paint=[];root.traverse(o=>{if(o.isLight)o.userData.furnitureId=id;if(o.isMesh){o.userData.furnitureId=id;if(o.material.userData.editablePaint)paint.push(o.material)}});
-    const record={...template,id,root,paint:[...new Set(paint)],initial:template.initial.clone(),mount:template.mount?structuredClone(template.mount):null,color:null,exists:true};if(record.railing){record.localBounds=template.localBounds.clone();rebuildRailing(record,template.defaultRailingWidth)}if(record.woodFinish)applyWoodFinish(record,null);scene.add(root);records.set(id,record);return record;
+    const record={...template,id,root,paint:[...new Set(paint)],initial:template.initial.clone(),mount:template.mount?structuredClone(template.mount):null,color:null,exists:true};if(record.railing){record.localBounds=template.localBounds.clone();rebuildRailing(record,template.defaultRailingWidth)}if(record.woodFinish)applyWoodFinish(record,null);syncWallDetails(record);scene.add(root);records.set(id,record);return record;
   }
   function applyColor(record,color){if(record.woodFinish){applyWoodFinish(record,color);return}record.color=color;for(const material of record.paint)material.color.set(color||material.userData.baseColor)}
   function colorPreview(id,color){const r=get(id);if(!r||(color!==null&&!/^#[0-9a-f]{6}$/i.test(color)))return;applyColor(r,color);emit('preview')}
@@ -100,7 +110,7 @@ export function createFurnitureSystem({scene,specs,mergeGeometries,floorSystem=n
     for(const record of records.values()){record.exists=false;record.root.visible=false}
     for(const item of valid){
       const r=records.get(item.id)||createCopy(item.sourceId,item.id);if(!r)continue;
-      r.exists=true;r.root.visible=item.visible!==false;r.root.position.fromArray(item.position);r.root.rotation.y=item.rotation;r.root.userData.placementInvalid=false;applyColor(r,item.id==='stair-entrance'&&!item.entranceFinishVersion&&item.color==='#60402e'?null:item.color);if(r.railing)rebuildRailing(r,Number.isFinite(item.railingWidth)?item.railingWidth:r.defaultRailingWidth);
+      r.exists=true;r.detached=!!item.detached;r.root.visible=item.visible!==false;r.root.position.fromArray(item.position);r.root.rotation.y=item.rotation;r.root.userData.placementInvalid=false;applyColor(r,item.id==='stair-entrance'&&!item.entranceFinishVersion&&item.color==='#60402e'?null:item.color);if(r.railing)rebuildRailing(r,Number.isFinite(item.railingWidth)?item.railingWidth:r.defaultRailingWidth);
       if(r.kind==='wall'){const size=r.localBounds.getSize(new THREE.Vector3());r.root.scale[r.lengthAxis]=Number.isFinite(item.lengthScale)?THREE.MathUtils.clamp(item.lengthScale,1/size[r.lengthAxis],24/size[r.lengthAxis]):1;r.root.scale.y=Number.isFinite(item.heightScale)?THREE.MathUtils.clamp(item.heightScale,.6/size.y,6/size.y):Math.min(1,6/size.y);architecture?.setMaterial(r,item.wallMaterial||null)}
       r.mount=item.mount&&typeof item.mount.wallId==='string'&&Array.isArray(item.mount.local)&&item.mount.local.length===3&&item.mount.local.every(Number.isFinite)&&Number.isFinite(item.mount.rotation)?structuredClone(item.mount):null;
       r.surface=['outdoor','foundation','floor-1','floor-2','wall-top','other'].includes(item.surface)?item.surface:(r.root.position.y>3?'floor-2':r.root.position.y<.7?'outdoor':'floor-1');
@@ -121,19 +131,20 @@ export function createFurnitureSystem({scene,specs,mergeGeometries,floorSystem=n
     if(scatter?.get(id)){const ok=scatter.move(id,x,z);emit('preview');return ok}
     const r=get(id);if(!r||!Number.isFinite(x)||!Number.isFinite(z))return false;
     if(r.kind==='wall'){
-      const before=r.root.position.clone(),angle=r.root.rotation.y,mount=r.mount;
+      const before=r.root.position.clone(),beforeScale=r.root.scale.clone(),angle=r.root.rotation.y,mount=r.mount;
       const base=wallId?get(wallId):(!Number.isFinite(y)||Math.abs(y-r.root.position.y)<.05)&&mount?.type==='stack'?get(mount.wallId):null;
       let valid;
       if(base?.kind==='wall'){valid=architecture.stacking.pose(r,base,new THREE.Vector3(x,y||r.root.position.y,z));if(valid)architecture.stacking.bind(r,base)}
-      else{r.mount=null;r.root.position.set(x,Number.isFinite(y)?y:r.root.position.y,z);r.root.updateMatrixWorld(true);valid=architecture?.validWall(r)}
-      if(!valid){r.root.position.copy(before);r.root.rotation.y=angle;r.mount=mount;r.root.updateMatrixWorld(true);return false}architecture?.sync();emit('preview');return true;
+      else{r.mount=null;r.root.position.set(x,Number.isFinite(y)?y:r.root.position.y,z);if(Number.isFinite(y))architecture?.snapToFoundation(r);r.root.updateMatrixWorld(true);valid=architecture?.validWall(r)}
+      if(!valid){r.root.position.copy(before);r.root.scale.copy(beforeScale);r.root.rotation.y=angle;r.mount=mount;r.root.updateMatrixWorld(true);return false}architecture?.sync();emit('preview');return true;
     }
-    if(r.kind==='mounted'){const ok=architecture?.moveMounted(r,new THREE.Vector3(x,Number.isFinite(y)?y:r.root.position.y,z),wallId,faceSign);r.root.userData.placementInvalid=!ok;emit('preview');return!!ok}
+    if(r.kind==='mounted'&&wallId!==null){r.detached=false;const ok=architecture?.moveMounted(r,new THREE.Vector3(x,Number.isFinite(y)?y:r.root.position.y,z),wallId,faceSign);r.root.userData.placementInvalid=!ok;emit('preview');return!!ok}
+    if(r.kind==='mounted'){r.detached=true;r.mount=null}
     y=Number.isFinite(y)?y:(placement?placement.heightAt(x,z,Infinity,id):r.root.position.y);
     if(placement)y=placement.restingHeight(r,x,z,y);
     const blockedWall=wallId&&get(wallId)?.kind==='wall'&&!get(wallId).wallTop;
     const valid=!blockedWall&&(!placement||placement.valid(r,x,y,z));r.root.userData.placementInvalid=!valid;
-    if(valid||allowInvalid){r.root.position.set(x,y,z);r.root.updateMatrixWorld(true);if(valid){r.surface=placement?.supportAt(x,z,r.root.position.y,id)?.id||r.surface;architecture?.bindSupport(r)}}emit('preview');return valid;
+    if(valid||allowInvalid){r.root.position.set(x,y,z);r.root.updateMatrixWorld(true);if(valid){r.surface=placement?.supportAt(x,z,r.root.position.y,id)?.id||r.surface;if(!r.detached)architecture?.bindSupport(r)}}emit('preview');return valid;
   }
   function rotationPreview(id,degrees){
     const r=get(id);if(!r||!Number.isFinite(degrees))return false;const before=r.root.rotation.y;
@@ -141,7 +152,7 @@ export function createFurnitureSystem({scene,specs,mergeGeometries,floorSystem=n
     if(r.kind==='wall'&&architecture&&!architecture.validWall(r)){r.root.rotation.y=before;r.root.updateMatrixWorld(true);return false}
     if(r.kind!=='wall'&&r.kind!=='mounted'&&placement&&!placement.valid(r,...r.root.position.toArray())){r.root.rotation.y=before;emit('preview');return false}
     r.root.updateMatrixWorld(true);
-    if(r.kind==='mounted'&&r.mount){if(!architecture?.bind(r,r.mount.wallId)){r.root.rotation.y=before;r.root.updateMatrixWorld(true);emit('preview');return false}}
+    if(r.kind==='mounted'&&!r.detached&&r.mount){if(!architecture?.bind(r,r.mount.wallId)){r.root.rotation.y=before;r.root.updateMatrixWorld(true);emit('preview');return false}}
     else if(r.kind==='wall'){if(r.mount?.type==='stack')architecture.stacking.bind(r,get(r.mount.wallId));architecture?.sync()}else if(r.mount)architecture?.bind(r,r.mount.wallId,r.mount.type);emit('preview');return true;
   }
   function lengthPreview(id,length){const r=get(id);if(r?.kind!=='wall'||!Number.isFinite(length))return false;const before=r.root.scale.clone();r.root.scale[r.lengthAxis]=THREE.MathUtils.clamp(length,architecture?.minimumLength(id)||1,24)/r.localBounds.getSize(new THREE.Vector3())[r.lengthAxis];r.root.updateMatrixWorld(true);if(architecture&&!architecture.validWall(r)){r.root.scale.copy(before);r.root.updateMatrixWorld(true);return false}architecture?.sync();emit('preview');return true}
@@ -177,7 +188,7 @@ export function createFurnitureSystem({scene,specs,mergeGeometries,floorSystem=n
   function remove(id){if(scatter?.get(id)){transaction(()=>scatter.remove(id));return}const r=get(id);if(r)transaction(()=>{if(r.kind==='wall')construction?.removeStackedOn(id);r.root.visible=false;if(r.kind==='wall')for(const f of all())if(f.mount?.wallId===id)f.root.visible=false;architecture?.sync()})}
   function restore(id){const r=get(id);if(r&&!r.root.visible&&!canAdd())return false;if(r)transaction(()=>{r.root.visible=true;architecture?.sync()})}
   function newCopy(sourceId){if(!canAdd()||all().length>=500)return null;let id;do{id='copy-'+(++serial)}while(records.has(id));const r=createCopy(sourceId,id);if(r?.kind==='wall')r.root.scale[r.lengthAxis]=3/r.localBounds.getSize(new THREE.Vector3())[r.lengthAxis];return r}
-  function add(sourceId,near){return transaction(()=>{const r=newCopy(sourceId);if(!r)return null;if(near)movePreview(r.id,near.x,near.z,near.y);else movePreview(r.id,r.initial.x+.40,r.initial.z+.35);return r})}
+  function add(sourceId,near){return transaction(()=>{const r=newCopy(sourceId);if(!r)return null;if(near)movePreview(r.id,near.x,near.z,near.y,false,r.kind==='mounted'?null:undefined);else movePreview(r.id,r.initial.x+.40,r.initial.z+.35);return r})}
   function beginPlacement(id,kind){
     beginGesture();const existing=get(id);const r=kind==='catalog'?newCopy(id):existing?.root.visible||canAdd()?existing:null;
     if(!r){cancelGesture();return null}r.root.visible=true;emit('preview');return r;
@@ -185,11 +196,11 @@ export function createFurnitureSystem({scene,specs,mergeGeometries,floorSystem=n
   function cancelPlacement(id,created){
     cancelGesture();if(created){const r=records.get(id);if(r){r.root.removeFromParent();const materials=new Set();r.root.traverse(o=>{if(o.isMesh)materials.add(o.material)});materials.forEach(m=>m.dispose());records.delete(id)}}
   }
-  function resetItem(id){const r=get(id);if(r)transaction(()=>{r.root.position.copy(r.initial);r.root.rotation.y=0;r.root.scale.set(1,r.kind==='wall'?Math.min(1,6/r.localBounds.getSize(new THREE.Vector3()).y):1,1);r.surface=templates.get(r.sourceId).surface;r.mount=templates.get(r.sourceId).mount?structuredClone(templates.get(r.sourceId).mount):null;if(r.railing)rebuildRailing(r,r.defaultRailingWidth);if(r.kind==='wall')architecture?.setMaterial(r,null);applyColor(r,null);r.root.updateMatrixWorld(true);architecture?.sync()})}
+  function resetItem(id){const r=get(id);if(r)transaction(()=>{r.root.position.copy(r.initial);r.root.rotation.y=0;r.root.scale.set(1,r.kind==='wall'?Math.min(1,6/r.localBounds.getSize(new THREE.Vector3()).y):1,1);r.detached=false;r.surface=templates.get(r.sourceId).surface;r.mount=templates.get(r.sourceId).mount?structuredClone(templates.get(r.sourceId).mount):null;if(r.railing)rebuildRailing(r,r.defaultRailingWidth);if(r.kind==='wall')architecture?.setMaterial(r,null);applyColor(r,null);r.root.updateMatrixWorld(true);architecture?.sync()})}
   function resetLayout(){transaction(()=>restoreState(initialState))}
   function undo(){if(gesture)cancelGesture();if(!undoStack.length)return;redoStack.push(serialize());restoreState(undoStack.pop());emit('commit')}
   function redo(){if(!redoStack.length)return;undoStack.push(serialize());restoreState(redoStack.pop());emit('commit')}
-  return {addRewardSuites,initialLayout:()=>structuredClone(initialState),objectCount,canAdd,objectLimit:OBJECT_LIMIT,clearHistory:()=>{gesture=null;undoStack.length=0;redoStack.length=0;emit('restore')},resizeRailingPreview,rebuildRailing,all,get,templates,catalog,floorSystem,floorPreview,lengthPreview,resizeWallPreview,materialPreview,serialize,load:restoreState,loadSaved,subscribe:fn=>{listeners.add(fn);return()=>listeners.delete(fn)},setColor,colorPreview,rotate,move,movePreview,rotationPreview,remove,restore,add,resetItem,resetLayout,undo,redo,beginGesture,commitGesture,cancelGesture,constrain,beginPlacement,cancelPlacement,setPlacement:value=>{placement=value;ensureClearance();for(const r of all()){r.initial.copy(r.root.position);const t=templates.get(r.id);if(t){t.root.position.copy(r.root.position);t.mount=r.mount?structuredClone(r.mount):null}}initialState=serialize()},get placement(){return placement},setArchitecture:value=>{architecture=value;initialState=serialize()},get architecture(){return architecture},
+  return {registerLooseTemplate,addRewardSuites,syncWallDetails,initialLayout:()=>structuredClone(initialState),objectCount,canAdd,objectLimit:OBJECT_LIMIT,clearHistory:()=>{gesture=null;undoStack.length=0;redoStack.length=0;emit('restore')},resizeRailingPreview,rebuildRailing,all,get,templates,catalog,floorSystem,floorPreview,lengthPreview,resizeWallPreview,materialPreview,serialize,load:restoreState,loadSaved,subscribe:fn=>{listeners.add(fn);return()=>listeners.delete(fn)},setColor,colorPreview,rotate,move,movePreview,rotationPreview,remove,restore,add,resetItem,resetLayout,undo,redo,beginGesture,commitGesture,cancelGesture,constrain,beginPlacement,cancelPlacement,setPlacement:value=>{placement=value;ensureClearance();for(const r of all()){r.initial.copy(r.root.position);const t=templates.get(r.id);if(t){t.root.position.copy(r.root.position);t.mount=r.mount?structuredClone(r.mount):null}}initialState=serialize()},get placement(){return placement},setArchitecture:value=>{architecture=value;for(const record of catalogGroups.values())if(record.kind==='wall'){record.paint=[];record.root.traverse(o=>{if(o.isMesh&&o.material.userData.editablePaint)record.paint.push(o.material)});architecture.setMaterial(record,null)};initialState=serialize()},get architecture(){return architecture},
     setConstruction:value=>{construction=value;initialState=serialize()},get construction(){return construction},setScatter:value=>{scatter=value;initialState=serialize()},get scatter(){return scatter},transaction,notify:()=>emit('preview'),
     get canUndo(){return undoStack.length>0},get canRedo(){return redoStack.length>0},get gesturing(){return!!gesture},get historyLength(){return undoStack.length}};
 }
