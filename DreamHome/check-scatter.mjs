@@ -12,7 +12,7 @@ export function checkScatter({system,scene,camera,editor,controls,canvas,tap,$,w
   function start(type='snow',point=ground){const card=prepare(type);card.emit('pointerdown',{...library,pointerType:'touch'});winEvents.emit('pointermove',{...project(point),pointerType:'touch'});return card}
   function hold(seconds){const now=performance.now();for(let t=100;t<=seconds*1000;t+=100)editor.update(now+t)}
   test('original exterior snow is removed, and the props category shows four distinct real model previews',()=>{
-    assert.equal(window.__winterScene.snow.visible,false);
+    assert.equal(window.__winterScene.snow.visible,true);
     scene.traverse(o=>{if(o.isMesh)assert.notEqual(o.material?.color?.getHexString(),'f5fbff','no original snow mesh: '+o.name)});
     prepare();assert.equal($('library-list').children.length,4);assert.deepEqual(scatter.catalog.map(c=>c.name),['雪','花瓣','树叶','彩带']);
     for(const card of $('library-list').children){assert.equal(card.textContent,'');assert.ok(card.children[0].src.startsWith('mock-model:scatter-'))}

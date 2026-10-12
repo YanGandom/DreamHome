@@ -23,7 +23,7 @@
     <button id="scene-menu-toggle" class="icon-button menu-toggle" aria-label="场景菜单" aria-expanded="false" aria-controls="scene-menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"/></svg></button>
     <div id="scene-menu" class="scene-menu" hidden aria-label="场景设置">
       <button id="rotate" aria-pressed="false"><span class="menu-icon" aria-hidden="true">↻</span><span>环绕</span><span class="switch" aria-hidden="true"></span></button>
-      <button id="snow" aria-pressed="false"><span class="menu-icon" aria-hidden="true">❄</span><span>飘雪</span><span class="switch" aria-hidden="true"></span></button>
+      <button id="snow" class="active" aria-pressed="true"><span class="menu-icon" aria-hidden="true">❄</span><span>飘雪</span><span class="switch" aria-hidden="true"></span></button>
       <button id="night" aria-pressed="false"><span class="menu-icon" aria-hidden="true">☾</span><span>夜景</span><span class="switch" aria-hidden="true"></span></button>
       <button id="capture"><span class="menu-icon" aria-hidden="true">↓</span><span>保存画面</span><span class="menu-end" aria-hidden="true">PNG</span></button>
     </div>
@@ -124,7 +124,7 @@
       const files=['vendor/three.module.js','vendor/OrbitControls.js','vendor/RoundedBoxGeometry.js','vendor/BufferGeometryUtils.js','scene.js','game-rules.js','game-flow.js','progression.js','progression-ui.js','levels.js','level-config.js','level-presets.js','settings.js','game-audio.js','i18n.js','locale-data.js','furniture-system.js','editor.js','object-controls.js','scene-picking.js','ground-selection.js','placement.js','architecture-system.js','wall-mounting.js','wall-stacking.js','floor-system.js','floor-controls.js','model-thumbnails.js','railing-system.js','wall-handles.js','foundation-system.js','outdoor-plots.js','building-system.js','building-controls.js','scene-menu.js','scatter-system.js','scatter-controls.js'];
       await Promise.all(files.map(checkFile));
       message.textContent='依赖已就绪，正在创建 3D 场景…';
-        await import('./scene.js?v=20261012-model-fixes-1');
+        await import('./scene.js?v=20261012-snow-1');
         const {startGame}=await import('./game-flow.js');startGame(window.__winterScene);
     }catch(error){fail(error)}
   </script>
