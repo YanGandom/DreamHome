@@ -76,7 +76,21 @@ for(const [id,x,w,h]of [['wall-1',-3.92,7.9,6.82],['wall-2',3.92,7.9,5.05]])wall
 for(const x of [-7.82,-.02,7.82])wallPart(x<0?'wall-1':'wall-2',()=>{const first=staticMeshes.length;box(x,3.05,-4.54,.30,4.1,.34,M.cream);for(let y=1.1;y<5.1;y+=.43)box(x,y,-4.47,.39,.08,.42,M.ivory,.02);for(const mesh of staticMeshes.slice(first))mesh.userData.wallPier=x});
 // Low pink cutaway walls, snow-capped exterior courses.
 const brickTexture=canvasTex((c,w,h)=>{c.fillStyle='#c5a99a';c.fillRect(0,0,w,h);const colors=['#bb7378','#bb7378','#c47e82','#bb7378','#ac666e','#b56c73','#bb7378','#ca878a'];const bw=w/8,bh=h/8,gap=w*.003;for(let row=0;row<8;row++)for(let col=-1;col<8;col++){const wrapped=(col+8)%8;c.fillStyle=colors[(wrapped*5+row*3)%colors.length];c.fillRect(col*bw+(row%2)*bw/2+gap/2,row*bh+gap/2,bw-gap,bh-gap)}});brickTexture.wrapS=brickTexture.wrapT=THREE.RepeatWrapping;brickTexture.anisotropy=4;M.brickFinish=new THREE.MeshStandardMaterial({map:brickTexture,roughness:.82});
-function brickwall(x,z,w,side=false){wallGroups.push(groupBuild(x,0,z,side?Math.PI/2:0,()=>{const body=box(0,1.18,0,w,1.08,.31,M.brickFinish);const p=body.geometry.attributes.position,n=body.geometry.attributes.normal,uv=body.geometry.attributes.uv;for(let i=0;i<uv.count;i++){const u=Math.abs(n.getX(i))>.5?p.getZ(i):p.getX(i);uv.setXY(i,(u+w/2)/2.32,(p.getY(i)+.54)/1)}box(0,1.73,0,w+.1,.11,.41,M.cream,.025)}))}
+function brickwall(x,z,w,side=false){wallGroups.push(groupBuild(x,0,z,side?Math.PI/2:0,()=>{
+  const body=box(0,1.18,0,w,1.08,.31,M.brickFinish);
+  // box() uses a shared unit cube. Own the UVs and convert coordinates to
+  // physical metres before projecting; otherwise every wall fits the same
+  // number of bricks regardless of its length and mutates other box models.
+  body.geometry=body.geometry.clone();
+  const p=body.geometry.attributes.position,n=body.geometry.attributes.normal,uv=body.geometry.attributes.uv;
+  for(let i=0;i<uv.count;i++){
+    const px=(p.getX(i)+.5)*w,py=(p.getY(i)+.5)*1.08,pz=(p.getZ(i)+.5)*.31;
+    const top=Math.abs(n.getY(i))>.5,end=Math.abs(n.getX(i))>.5;
+    uv.setXY(i,(end?pz:px)/2.32,top?pz:py);
+  }
+  uv.needsUpdate=true;
+  box(0,1.73,0,w+.1,.11,.41,M.cream,.025);
+}))}
 for(const [i,x,z,w,side]of [[5,-6.1,4.78,3.2,false],[6,2.35,4.78,10.2,false],[7,-7.82,2.25,4.6,true]]){furnishing('wall-'+i,'庭院矮墙 · '+(i-4),'walls',()=>brickwall(x,z,w,side),[M.brickFinish]);Object.assign(furnitureSpecs.at(-1),{kind:'wall',lengthAxis:side?'z':'x',interiorSign:side?1:-1,wallTop:true})}
 // Balcony across the yellow salon, with two descending stair flights.
 roomFloor('balcony','二层楼廊',7.42,1.44,()=>box(-4.0,3.885,-3.83,7.42,.055,1.44,M.woodFloor));
