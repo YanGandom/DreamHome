@@ -11,7 +11,9 @@ export function createFloorControls({camera,renderer,system,onInteract=()=>{},on
   function update(){
     if(!selectedId)return;
     camera.updateMatrixWorld();const point=anchor.clone().project(camera),rect=renderer.domElement.getBoundingClientRect();
-    const width=popup.offsetWidth||280,height=popup.offsetHeight||84,margin=12;
+    const width=Math.min(280,rect.width-24),height=136,margin=12;popup.style.width=width+'px';
+    // Six finishes plus confirmation remain finger-sized on narrow screens.
+    [...options.children].forEach((button,i)=>{button.style.left=(i<4?28+i*(width-56)/3:width*(i===4?.25:.75))+'px';button.style.top=(i<4?(i===0||i===3?43:29):103)+'px'});confirm.style.left=width/2+'px';confirm.style.top='103px';
     const x=rect.left+(point.x+1)*rect.width/2,y=rect.top+(1-point.y)*rect.height/2;
     popup.style.visibility=point.z>=-1&&point.z<=1&&x>=rect.left&&x<=rect.left+rect.width&&y>=rect.top&&y<=rect.top+rect.height?'visible':'hidden';
     popup.style.left=Math.max(rect.left+margin,Math.min(x-width/2,rect.left+rect.width-width-margin))+'px';
@@ -29,7 +31,6 @@ export function createFloorControls({camera,renderer,system,onInteract=()=>{},on
     const image=document.createElement('img');image.src=style.preview;image.alt='';image.draggable=false;button.append(image);
     button.addEventListener('click',()=>{if(selectedId)system.floorPreview(selectedId,style.id)});options.append(button);
   }
-  const buttons=[...options.children,confirm];buttons.forEach((button,i)=>{button.style.left=(34+i*53)+'px';button.style.top=(54-Math.sin(i*Math.PI/4)*21)+'px'});
   confirm.addEventListener('click',()=>close());system.subscribe(render);render();
   return{select,close,update,get selectedId(){return selectedId}};
 }

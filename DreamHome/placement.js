@@ -17,8 +17,11 @@ export function createPlacement({surfaces,walls=[],getFurniture=()=>[],architect
     if(moved?.kind==='mounted'){
       for(const hit of raycaster.intersectObjects(wallRecords().map(w=>w.root),true)){
         normal.copy(hit.face.normal).applyMatrix3(matrix.getNormalMatrix(hit.object.matrixWorld)).normalize();
-        const w=record(hit.object.userData.furnitureId);if(normal.dot(architecture.normal(w))<.45)continue;
-        return{...describe(hit),id:'wall-face'};
+        const w=record(hit.object.userData.furnitureId),face=architecture.classifyFace(w,normal);
+        // A visible outside/end/top face blocks the drop; never raycast
+        // through it to a different wall deeper inside the house.
+        if(!face||face.side!=='interior')return null;
+        return{...describe(hit),id:'wall-face',side:face.side,faceSign:face.sign,roomId:face.roomId};
       }return null;
     }
     for(const hit of raycaster.intersectObjects(targets(id),true)){
@@ -32,12 +35,20 @@ export function createPlacement({surfaces,walls=[],getFurniture=()=>[],architect
   }
   function pickSurface(raycaster,id){
     const r=record(id);
-    if(r?.kind==='wall'){const point=raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-r.root.position.y),new THREE.Vector3());return point?{id:'foundation',point}:null}
+    if(r?.kind==='wall'){
+      const excluded=new Set([id,...architecture.stacking.descendants(id).map(w=>w.id)]);
+      const first=raycaster.intersectObjects([...(typeof surfaces==='function'?surfaces():surfaces),...wallRecords().filter(w=>!excluded.has(w.id)).map(w=>w.root)],true).find(h=>!excluded.has(h.object.userData.furnitureId));
+      const base=first&&record(first.object.userData.furnitureId);
+      if(base?.kind==='wall'){normal.copy(first.face.normal).applyMatrix3(matrix.getNormalMatrix(first.object.matrixWorld));if(normal.y>.45){const point=first.point.clone();point.y=architecture.bounds(base).max.y+.01-r.localBounds.min.y*r.root.scale.y;return{id:'wall-top',point,wallId:base.id}}}
+      const hit=raycaster.intersectObjects(typeof surfaces==='function'?surfaces():surfaces,true).find(h=>h.object.userData.buildType==='room'&&h.face.normal.y>.5);
+      if(hit){const point=hit.point.clone();point.y+=r.initial.y-1.02;return{id:'foundation',point}}
+      const point=raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-r.root.position.y),new THREE.Vector3());return point?{id:'foundation',point}:null;
+    }
     const hit=supportHit(raycaster,id);if(hit)return hit;
     if(r?.kind==='mounted'||!['auto','outdoor'].includes(activeSurface))return null;
     const point=raycaster.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-groundY),new THREE.Vector3());return point?{id:'outdoor',point}:null;
   }
-  function pick(raycaster,id){const s=pickSurface(raycaster,id);if(!s)return null;s.point.surfaceId=s.id;s.point.wallId=s.wallId;return s.point}
+  function pick(raycaster,id){const s=pickSurface(raycaster,id);if(!s)return null;s.point.surfaceId=s.id;s.point.wallId=s.wallId;s.point.faceSign=s.faceSign;return s.point}
   function supportAt(x,z,hint=Infinity,id){down.set(new THREE.Vector3(x,Number.isFinite(hint)?hint+.10:100,z),new THREE.Vector3(0,-1,0));return pickSurface(down,id)}
   function heightAt(x,z,hint=Infinity,id){return supportAt(x,z,hint,id)?.point.y??groundY}
   // Raised floor patterns must clear the whole footprint, including a rug whose

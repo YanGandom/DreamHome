@@ -1,14 +1,16 @@
 import './check-geometry.mjs';
 import assert from 'node:assert/strict';
 import * as THREE from './vendor/three.module.js';
+import {checkFoundations} from './check-foundations.mjs';
+import {checkDefaultComponents} from './check-default-components.mjs';
 const {furnitureSystem:system,scene,camera}=window.__winterScene,build=system.construction;
 const initial=system.serialize(),cases=[];
 const check=(name,fn)=>{system.load(initial);fn();cases.push(name)};
 const room=(x=14,z=0,level=1)=>{const id=build.addRoom({x,z},level);assert.ok(id,build.lastError);return id};
 const dimensions=id=>build.getModel(id).getWorldPosition(new THREE.Vector3());
-check('new room creates only a 6m square foundation; minimum, maximum, overlap and grid snapping are enforced',()=>{
-  const id=room(),r=build.room(id);assert.equal(r.width,6);assert.equal(r.depth,6);assert.equal(build.state.walls.length,0);assert.equal(build.getModel(id).children.length,1);assert.equal(build.addRoom({x:0,z:0}),false);
-  assert.equal(build.updateRoom(id,{width:2.75}),false);assert.equal(build.updateRoom(id,{width:24.25}),false);assert.equal(build.updateRoom(id,{width:3,depth:24}),true);
+check('new room creates a bordered 6m foundation with its own ground; size, overlap and snapping limits hold',()=>{
+  const id=room(),r=build.room(id);assert.equal(r.width,6);assert.equal(r.depth,6);assert.equal(build.state.walls.length,0);assert.ok(build.getModel(id).getObjectByName('FoundationBorder'));assert.ok(build.ground.root.children.length);assert.equal(build.addRoom({x:0,z:0}),false);
+  assert.equal(build.updateRoom(id,{width:2.75}),false);assert.equal(build.updateRoom(id,{width:20.25}),false);assert.equal(build.updateRoom(id,{width:3,depth:20}),true);
   assert.equal(build.addRoom({x:14,z:0}),false);const near=build.snapRoom({id:'draft',x:20.1,z:.1,width:6,depth:6,level:1});assert.equal(near.z,0);
 });
 check('walls stay inside the assigned foundation and never grow its footprint',()=>{
@@ -40,9 +42,9 @@ check('roof parts and chimney follow room position, roof changes and floor visib
   const id=room();assert.ok(build.setRoof(id,'gable'));const chimney=build.addDecoration(id,.4,.4),p=dimensions(chimney);assert.ok(build.updateRoom(id,{x:16}));assert.ok(Math.abs(dimensions(chimney).x-p.x-2)<1e-6);build.setRoof(id,'flat');assert.ok(dimensions(chimney).y<p.y);
   const before=system.serialize();build.setView('1');build.applyView(camera);assert.equal(build.getModel(id+'-roof').children[0].layers.mask&1,0);assert.equal(build.getModel(chimney).children[0].layers.mask&1,0);assert.deepEqual(system.serialize(),before);build.setView('outside');build.applyView(camera);assert.equal(build.getModel(chimney).children[0].layers.mask&1,1);
 });
-check('new floors accept all four materials, remain independent and keep surface clearance',()=>{
+check('new floors accept all seven materials, remain independent and keep surface clearance',()=>{
   const id=room(),other=room(24);for(const style of system.floorSystem.styles){assert.ok(system.floorPreview(id,style.id));assert.equal(system.floorSystem.get(id).styleId,style.id)}assert.equal(system.floorSystem.get(other).styleId,'wood-planks');
-  const r=system.get('salon-rug');assert.ok(system.movePreview(r.id,14,0,1.02));assert.ok(Math.abs(r.root.position.y-1.03)<1e-6);const texture=system.floorSystem.get(id).materials.get('tile-floral').map;build.setRoof(id,'gable');assert.equal(system.floorSystem.get(id).styleId,'tile-floral');assert.equal(system.floorSystem.get(id).materials.get('tile-floral').map,texture,'reuse texture while changing geometry');
+  const r=system.get('salon-rug');assert.ok(system.movePreview(r.id,14,0,1.02));assert.ok(Math.abs(r.root.position.y-1.03)<1e-6);const texture=system.floorSystem.get(id).materials.get('tile-terrazzo').map;build.setRoof(id,'gable');assert.equal(system.floorSystem.get(id).styleId,'tile-terrazzo');assert.equal(system.floorSystem.get(id).materials.get('tile-terrazzo').map,texture,'reuse texture while changing geometry');
 });
 check('construction, colors, door parameters and floor finishes share one undo and survive reload',()=>{
   system.beginGesture();const id=room(),w=build.addWall(id,'back');build.addDoor(w,1);build.setStyle(id,'tile-floral');build.setRoof(id,'gable');build.addDecoration(id);build.color(w,'#a8bca1');system.commitGesture();const after=system.serialize();system.undo();assert.deepEqual(system.serialize(),initial);system.redo();assert.deepEqual(system.serialize(),after);system.loadSaved(after);assert.deepEqual(system.serialize(),after);
@@ -53,5 +55,27 @@ check('deleting a room stores its furniture and undo restores the whole room',()
 check('cancelling construction restores geometry, floor records and furniture without orphaned nodes',()=>{
   const children=scene.getObjectByName('NewConstruction').children.length;system.beginGesture();const id=room();build.addWall(id,'left');build.setRoof(id,'flat');system.cancelGesture();assert.deepEqual(system.serialize(),initial);assert.equal(scene.getObjectByName('NewConstruction').children.length,children);assert.equal(system.floorSystem.all().length,3);
 });
-check('legacy layouts without construction remain loadable',()=>{const state=structuredClone(initial);delete state.building;room();system.loadSaved(state);assert.equal(build.all().length,0);assert.equal(system.floorSystem.all().length,3)});
+check('legacy layouts without construction remain loadable',()=>{const state=structuredClone(initial);delete state.building;room();system.loadSaved(state);assert.equal(build.all().length,3);assert.equal(system.floorSystem.all().length,3)});
+checkFoundations({system,scene,build,check,room,initial});
+check('standalone ground plots merge without a room and persist through edits, history and old layouts',()=>{
+  system.beginGesture();const first=build.addGround({x:24,z:0}),second=build.addGround({x:30,z:0});assert.ok(first&&second);assert.equal(build.all().length,3);assert.equal(build.state.walls.length,0);assert.equal(system.floorSystem.all().length,3);
+  const cap=()=>build.ground.root.children.at(-1);assert.ok(Math.abs(cap().geometry.userData.area-(18.5*15.4+12*6))<1e-5);assert.ok(build.updateGround(second,{depth:8}));assert.ok(build.rotateGround(second));assert.equal(build.groundPlot(second).width,8);
+  assert.equal(build.updateGround(second,{width:2}),false);assert.equal(build.addGround({x:Infinity,z:0}),false);assert.ok(build.updateGround(second,{x:34}));system.commitGesture();const saved=system.serialize(),vertices=Array.from(cap().geometry.attributes.position.array);
+  system.undo();assert.equal(build.state.grounds.length,0);system.redo();assert.deepEqual(system.serialize(),saved);system.loadSaved(saved);assert.deepEqual(system.serialize(),saved);assert.deepEqual(Array.from(cap().geometry.attributes.position.array),vertices);
+  const r=system.get('plant-salon'),hit=system.placement.supportAt(24,0,100,'__ground_test__');assert.equal(hit.id,'outdoor');assert.ok(hit.object);assert.ok(system.movePreview(r.id,24,0,hit.point.y));assert.ok(Math.abs(r.root.position.y-.15)<1e-5);
+  const foundation=room(24);build.remove(foundation);assert.equal(build.state.grounds.length,2,'room removal preserves independently placed ground');assert.ok(build.groundAt(24,0));
+  const legacy=structuredClone(saved);delete legacy.building.grounds;system.loadSaved(legacy);assert.equal(build.state.grounds.length,0);
+});
+check('new geometric and terrazzo floors retain density through resizing and save independently from their borders',()=>{
+  const id=room(24),other=room(34);for(const style of ['tile-geometric','tile-terrazzo']){
+    assert.ok(build.setStyle(id,style));assert.ok(build.updateRoom(id,{width:8,depth:7}));const floor=system.floorSystem.get(id),map=floor.base.material.map;assert.ok(Math.abs(map.repeat.x/floor.width-1/2.4)<1e-8);assert.ok(Math.abs(map.repeat.y/floor.depth-1/2.4)<1e-8);
+    assert.equal(build.getModel(id).getObjectByName('FoundationBorder').material.map,null);assert.equal(system.floorSystem.get(other).styleId,'wood-planks');const saved=system.serialize();system.loadSaved(saved);assert.equal(system.floorSystem.get(id).styleId,style);assert.deepEqual(system.serialize(),saved);
+  }
+});
+check('white wall crowns follow wall length and height, and remain white when the wall is recolored or retextured',()=>{
+  const id=room(24),w=build.addWall(id,'back');
+  const verify=()=>{const wall=build.getWall(w),crown=wall.root.getObjectByName('WhiteWallCrown'),b=new THREE.Box3().setFromObject(crown);assert.ok(crown);assert.ok(Math.abs(b.max.y-(build.height(build.room(id))+build.state.height))<1e-5);assert.ok(Math.abs(b.max.x-b.min.x-build.wall(w).width)<1e-5);assert.ok(b.max.z-b.min.z>.3);crown.traverse(o=>{if(o.isMesh){assert.equal(o.material.color.getHexString(),'fff9ef');assert.equal(o.material.map,null);assert.ok(!wall.paint.includes(o.material))}})};
+  verify();build.setStyle(w,'brick');build.color(w,'#a4bfca');build.updateWall(w,{width:4});build.setHeight(4.5);verify();const saved=system.serialize();system.loadSaved(saved);verify();assert.deepEqual(system.serialize(),saved);
+});
+checkDefaultComponents({system,build,check,room,initial});
 system.load(initial);console.log(JSON.stringify({passed:cases.length,cases,scope:'CPU parametric geometry and full scene integration'},null,2));

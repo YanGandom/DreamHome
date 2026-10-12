@@ -9,6 +9,7 @@ import { createFloorSystem } from './floor-system.js';
 import { createArchitectureSystem } from './architecture-system.js';
 import { createSceneMenu } from './scene-menu.js';
 import { createBuildingSystem } from './building-system.js';
+import { createScatterSystem } from './scatter-system.js';
 
 const mount=document.querySelector('#scene');
 // Some embedded browsers cannot allocate an antialiased WebGL context.
@@ -41,7 +42,7 @@ M.glow=new THREE.MeshStandardMaterial({color:'#ffdc7d',emissive:'#ffb441',emissi
 const geos={box:new THREE.BoxGeometry(1,1,1),sphere:new THREE.SphereGeometry(1,16,10),cyl:new THREE.CylinderGeometry(1,1,1,16)};
 function add(geo,m,x,y,z,parent=world){const o=new THREE.Mesh(geo,m);o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;parent.add(o);if(parent===world)staticMeshes.push(o);return o}
 function box(x,y,z,w,h,d,m,b=0){const geo=b?new RoundedBoxGeometry(w,h,d,2,Math.min(b,w/3,h/3,d/3)):geos.box;const o=add(geo,m,x,y,z);if(!b)o.scale.set(w,h,d);return o}
-function wallBox(...args){const id='wall-'+(wallGroups.length+1);let mesh;furnishing(id,['会客厅后墙','大堂后墙','会客厅侧墙','大堂侧墙'][wallGroups.length],'walls',()=>{mesh=box(...args)},[args[6]]);Object.assign(furnitureSpecs.at(-1),{kind:'wall',lengthAxis:args[3]>args[5]?'x':'z',wallTop:false});wallGroups.push([mesh]);return mesh}
+function wallBox(...args){const id='wall-'+(wallGroups.length+1),lengthAxis=args[3]>args[5]?'x':'z';let mesh;furnishing(id,['会客厅后墙','大堂后墙','会客厅侧墙','大堂侧墙'][wallGroups.length],'walls',()=>{mesh=box(...args)},[args[6]]);Object.assign(furnitureSpecs.at(-1),{kind:'wall',lengthAxis,interiorSign:(lengthAxis==='x'?args[2]:args[0])>0?-1:1,wallTop:false});wallGroups.push([mesh]);return mesh}
 function ell(x,y,z,sx,sy,sz,m){const o=add(geos.sphere,m,x,y,z);o.scale.set(sx,sy,sz);return o}
 function cyl(x,y,z,r,h,m,rt=r,N=24){return add(new THREE.CylinderGeometry(rt,r,h,N),m,x,y,z)}
 function tor(x,y,z,r,t,m,rot=[Math.PI/2,0,0]){const o=add(new THREE.TorusGeometry(r,t,7,36),m,x,y,z);o.rotation.set(...rot);return o}
@@ -61,7 +62,6 @@ function rug(x,z,w,d,kind=0){const tex=canvasTex((c,W,H)=>{c.fillStyle=kind?'#bd
 
 // Architecture: a completely modeled open-roof, two-room miniature.
 box(0,-.345,1,18.3,.85,15.2,M.stone,.22);box(0,.05,1,18.5,.18,15.4,M.cream,.08);
-box(0,.48,0,15.8,.92,9.8,M.stone,.07);box(0,.92,0,16,.18,10,M.ivory,.045);
 foundationMeshes.push(...staticMeshes);for(const [i,mesh]of foundationMeshes.entries())mesh.userData.surfaceId=i<2?'outdoor':'foundation';
 roomFloor('lobby','酒店大堂',7.6,9.4,()=>box(3.7,1.005,0,7.6,.025,9.4,M.woodFloor));
 roomFloor('salon','会客厅',7.8,9.4,()=>{
@@ -76,20 +76,24 @@ for(const [id,x,w,h]of [['wall-1',-3.92,7.9,6.82],['wall-2',3.92,7.9,5.05]])wall
 for(const x of [-7.82,-.02,7.82])wallPart(x<0?'wall-1':'wall-2',()=>{box(x,3.05,-4.54,.30,4.1,.34,M.cream);for(let y=1.1;y<5.1;y+=.43)box(x,y,-4.47,.39,.08,.42,M.ivory,.02)});
 // Low pink cutaway walls, snow-capped exterior courses.
 function brickwall(x,z,w,side=false){wallGroups.push(groupBuild(x,0,z,side?Math.PI/2:0,()=>{box(0,1.18,0,w,1.08,.25,M.mortar);for(let row=0;row<4;row++)for(let xx=-w/2;xx<w/2;xx+=.58){const center=xx+.27+(row%2)*.28;if(center<w/2)box(center,.78+row*.25,.025,.55,.225,.31,(row+Math.floor(xx*3))%2?M.brick:M.brick2,.014)}box(0,1.73,0,w+.1,.11,.41,M.cream,.025);box(0,1.81,0,w,.07,.37,M.snow,.033)}))}
-for(const [i,x,z,w,side]of [[5,-6.1,4.78,3.2,false],[6,2.35,4.78,10.2,false],[7,-7.82,2.25,4.6,true]]){furnishing('wall-'+i,'庭院矮墙 · '+(i-4),'walls',()=>brickwall(x,z,w,side),[M.mortar,M.brick,M.brick2]);Object.assign(furnitureSpecs.at(-1),{kind:'wall',lengthAxis:side?'z':'x',wallTop:true})}
+for(const [i,x,z,w,side]of [[5,-6.1,4.78,3.2,false],[6,2.35,4.78,10.2,false],[7,-7.82,2.25,4.6,true]]){furnishing('wall-'+i,'庭院矮墙 · '+(i-4),'walls',()=>brickwall(x,z,w,side),[M.mortar,M.brick,M.brick2]);Object.assign(furnitureSpecs.at(-1),{kind:'wall',lengthAxis:side?'z':'x',interiorSign:side?1:-1,wallTop:true})}
 // Balcony across the yellow salon, with two descending stair flights.
-box(-4.0,3.72,-3.84,7.42,.28,1.48,M.woodDark);roomFloor('balcony','二层楼廊',7.42,1.44,()=>box(-4.0,3.885,-3.83,7.42,.055,1.44,M.woodFloor));
+roomFloor('balcony','二层楼廊',7.42,1.44,()=>box(-4.0,3.885,-3.83,7.42,.055,1.44,M.woodFloor));
 function baluster(x,y,z,h=.83,m=M.woodDark){cyl(x,y+.07,z,.09,.14,m);cyl(x,y+h-.06,z,.08,.12,m);cyl(x,y+h*.49,z,.034,h-.17,m);ell(x,y+.25,z,.064,.10,.064,m);ell(x,y+h-.23,z,.055,.10,.055,m)}
 function newel(x,y,z,h=1.05){box(x,y+h/2,z,.17,h,.17,M.woodDark,.025);cyl(x,y+h-.02,z,.13,.09,M.woodLight);ell(x,y+h+.10,z,.14,.15,.14,M.woodDark)}
-for(let x=-6.5;x<-.9;x+=.43)baluster(x,3.91,-3.08);beam([-6.65,4.79,-3.08],[-.80,4.79,-3.08],.066,M.woodDark);
+furnishing('balcony-railing','楼廊护栏','stairs',()=>{for(let x=-6.5;x<-.9;x+=.43)baluster(x,3.91,-3.08);beam([-6.65,4.79,-3.08],[-.80,4.79,-3.08],.066,M.woodDark)},[M.woodDark]);
 // Sweeping left stair, fan-shaped first treads and graceful curved rails.
 const stairY=1.03,stepH=2.87/15;
+furnishing('stair-left','弧形木楼梯','stairs',()=>{
 const stairPath=[];
 for(let i=0;i<15;i++){let t=i/14,x=-6.05-.73*Math.sin(t*Math.PI*.7),z=.25-t*3.95,y=stairY+stepH*(i+1);const o=box(x,(stairY+y)/2,z,1.28,y-stairY,.34,M.wood,.018);o.rotation.y=-.20*Math.sin(t*Math.PI);box(x,y+.017,z,1.33,.06,.36,M.woodLight,.025);stairPath.push([x,y,z]);for(const side of [-1,1]){const xx=x+side*.63;if(i%2===0)baluster(xx,y+.04,z,.83);}}
 for(const side of [-1,1])curve(stairPath.map(([x,y,z])=>[x+side*.64,y+.91,z]),.067,M.woodDark);
 newel(-5.40,1.2,.32);newel(-6.70,1.2,.32);newel(-6.10,3.94,-3.67);
+},[M.wood,M.woodDark,M.woodLight]);
+furnishing('stair-right','直线木楼梯','stairs',()=>{
 for(let i=0;i<15;i++){let z=1.25-i*.30,y=1.03+stepH*(i+1);box(-1.20,(1.03+y)/2,z,1.34,y-1.03,.32,M.wood);box(-1.20,y+.024,z,1.41,.065,.35,M.woodLight,.018);for(const x of [-1.91,-.49]){if(i%2===0)baluster(x,y+.055,z,.78)}}
 for(const x of [-1.91,-.49]){beam([x,2.0,1.28],[x,4.81,-2.97],.065,M.woodDark);newel(x,1.11,1.41);newel(x,3.9,-3.1)}
+},[M.wood,M.woodDark,M.woodLight]);
 
 // Windows with pane depth, raised frames and sculpted curtain folds.
 const windowTex=canvasTex((c,w,h)=>{const g=c.createLinearGradient(0,0,0,h);g.addColorStop(0,'#bed4d7');g.addColorStop(.48,'#edf6ef');g.addColorStop(1,'#8b9d8d');c.fillStyle=g;c.fillRect(0,0,w,h);for(let i=0;i<12;i++){c.fillStyle=i%2?'#cadbd0':'#8fa89f';let x=rnd()*w,y=150+rnd()*280;c.beginPath();c.moveTo(x,y-90);c.lineTo(x-60,y+80);c.lineTo(x+60,y+80);c.fill()}c.fillStyle='#f9ffff99';c.beginPath();c.moveTo(0,280);c.lineTo(w,100);c.lineTo(w,180);c.lineTo(0,360);c.fill()});
@@ -141,10 +145,12 @@ box(-3.74,1.49,-1.24,.63,.89,.63,M.wood,.045);box(-3.74,1.96,-1.24,.75,.12,.72,M
 
 },[M.ivory,M.cream]);
 // Partial central wall and emerald arch establish the connected hotel lobby.
+furnishing('wall-8','红色半高隔墙','walls',()=>{
 box(-.16,2.17,2.31,.24,2.30,3.60,M.redwall);box(-.16,3.34,2.31,.38,.15,3.68,M.cream,.025);
 for(let z=.66;z<4;z+=.68)box(-.015,1.62,z,.045,.97,.59,M.woodLight,.02);
+},[M.redwall,M.woodLight]);Object.assign(furnitureSpecs.at(-1),{kind:'wall',lengthAxis:'z',interiorSign:1,wallTop:false});
 function archDoor(x,z,angle){groupBuild(x,1,z,angle,()=>{box(0,1.11,0,1.37,2.22,.17,M.teal,.025);const shape=new THREE.Shape();shape.moveTo(-.685,0);shape.lineTo(-.685,.30);shape.absarc(0,.30,.685,Math.PI,0,true);shape.lineTo(.685,0);const ob=add(new THREE.ExtrudeGeometry(shape,{depth:.17,bevelEnabled:false}),M.teal,0,2.08,-.085);const pts=[];for(let i=0;i<=24;i++){let a=Math.PI-i*Math.PI/24;pts.push([Math.cos(a)*.75,2.40+Math.sin(a)*.75,.01])}curve([[-.75,.03,.01],[-.75,2.4,.01],...pts,[.75,.03,.01]],.06,M.woodDark);for(const xx of [-.34,.34]){box(xx,1.45,.10,.55,1.15,.025,M.glow);box(xx,.43,.10,.55,.58,.025,M.teal,.03);for(let k=-2;k<=2;k++){beam([xx-.24,1.13+k*.15,.13],[xx+.24,1.77+k*.15,.13],.012,M.teal);beam([xx+.24,1.13+k*.15,.13],[xx-.24,1.77+k*.15,.13],.012,M.teal)}}box(0,1.15,.14,.04,2.23,.055,M.teal);for(let xx of [-.09,.09])beam([xx,.94,.19],[xx,1.20,.19],.02,M.gold)})}
-archDoor(-.05,-.05,Math.PI/2);
+furnishing('emerald-arch-door','翡翠拱门','doors',()=>archDoor(-.05,-.05,Math.PI/2),[M.teal,M.woodDark]);
 let firelight;
 // Cream marble fireplace faces into the right room.
 furnishing('fireplace','大理石壁炉','decor',()=>{groupBuild(.07,1.02,2.10,Math.PI/2,()=>{box(0,.08,0,1.67,.16,.77,M.cream,.04);box(0,.67,-.12,1.31,1.20,.44,M.dark);for(let xx of [-.64,.64]){box(xx,.65,.02,.22,1.16,.57,M.ivory,.035);for(let y of [.18,1.1])box(xx,y,.055,.30,.10,.63,M.cream,.02);for(let dx of [-.05,.05])beam([xx+dx,.28,.325],[xx+dx,.98,.325],.012,M.goldLight)}box(0,1.28,0,1.64,.21,.75,M.ivory,.045);box(0,1.12,.21,.94,.25,.26,M.cream,.02);box(0,1.83,-.17,1.13,.96,.17,M.ivory,.02);tor(0,1.87,-.052,.31,.07,M.gold,[0,0,0]);const mirror=new THREE.MeshStandardMaterial({color:'#849ea7',metalness:.78,roughness:.13});const o=add(new THREE.CircleGeometry(.275,40),mirror,0,1.87,-.045);box(0,2.39,-.10,1.45,.12,.40,M.cream,.025);for(let xx of [-.5,.5]){cyl(xx,1.47,.08,.075,.15,M.gold);cyl(xx,1.64,.08,.028,.25,M.white);ell(xx,1.79,.08,.025,.06,.025,M.glow)}for(let zz of [-.1,.15]){beam([-.41,.28,zz],[.41,.22,zz+.11],.08,M.woodDark)}for(let xx=-.46;xx<=.46;xx+=.18)beam([xx,.17,.41],[xx,.54,.41],.022,M.gold);curve([[-.48,.53,.41],[0,.64,.41],[.48,.53,.41]],.028,M.gold)});
@@ -194,14 +200,16 @@ beam([-2.78,1.06,-.61],[-2.78,1.67,-.61],.06,M.woodDark);cyl(-2.78,1.08,-.61,.29
 
 },[M.woodLight,M.woodDark]);
 // Exterior stair, snowy terrace, fountain and courtyard furniture.
+furnishing('stair-entrance','室外入口台阶','stairs',()=>{
 for(let i=0;i<6;i++){let h=.92-i*.14,z=5.0+i*.34;box(-3.18,h/2,z,2.26,h,.45,M.cream,.02);box(-3.18,h+.016,z,1.71,.032,.44,M.red)}
 for(const x of [-4.41,-1.95]){for(let i=0;i<6;i++)baluster(x,.94-i*.14,5.0+i*.34,.71,M.cream);beam([x,1.68,4.93],[x,.84,6.77],.065,M.woodLight);for(const z of [4.87,6.80]){const y=z<5?1.01:.18;box(x,y+.44,z,.27,.88,.28,M.cream);ell(x,y+.97,z,.135,.14,.135,M.gold)}}
+},[M.cream,M.red,M.woodLight]);
 const outdoorStart=staticMeshes.length;
-for(let ix=0;ix<23;ix++)for(let iz=0;iz<5;iz++){const x=-8.3+ix*.73,z=5.0+iz*.73;if(x>-4.5&&x<-1.9&&z<7)continue;box(x,.16,z,.70,.055,.70,(ix+iz)%3?M.stone:M.cream,.035)}
+// Outdoor paving uses resizable construction areas rather than individual tiles.
 for(let i=0;i<70;i++){let x=-8.6+rnd()*17.2,z=4.95+rnd()*3.1;if(x>-4.6&&x<-1.75&&z<7.15)continue;if(Math.hypot(x+4.9,z-7.5)<1.6)continue;ell(x,.23,z,.3+rnd()*.5,.055+rnd()*.04,.25+rnd()*.5,M.snow)}
 // Snow blankets soften every cut edge of the miniature.
 for(let i=0;i<30;i++){let x=-8.3+i*.57;ell(x,.22,8.32,.49,.085,.36,M.snow)}for(let i=0;i<19;i++){let z=-5.82+i*.70;ell(-8.55,.24,z,.45,.085,.53,M.snow);ell(8.55,.24,z,.45,.09,.52,M.snow)}
-outdoorMeshes.push(...staticMeshes.slice(outdoorStart));for(const mesh of outdoorMeshes)mesh.userData.surfaceId='outdoor';
+outdoorMeshes.push(...staticMeshes.slice(outdoorStart).filter(m=>!m.userData.furnitureId));for(const mesh of outdoorMeshes)mesh.userData.surfaceId='outdoor';
 for(let i=0;i<3;i++)furnishing('garden-shrub-'+(i+1),'积雪花灌木 · '+(i+1),'plants',()=>{const x=.35+i*1.38,z=5.72;for(let j=0;j<4;j++){let a=j*1.6;curve([[x,.17,z],[x+Math.cos(a)*.16,.55,z+Math.sin(a)*.16],[x+Math.cos(a)*.30,.91,z+Math.sin(a)*.30]],.055,M.wood)}ell(x,1.03,z,.59,.47,.54,M.leaf);flowers(x,1.12,z,.83,true);for(let j=0;j<5;j++)ell(x+(rnd()-.5)*.65,1.40+rnd()*.13,z+(rnd()-.5)*.54,.19,.07,.16,M.snow)},[M.leaf,M.leafLight]);
 // Stone fountain, ice-colored water and tiered snow.
 furnishing('garden-fountain','庭院石雕喷泉','decor',()=>{
@@ -229,6 +237,9 @@ const fill=new THREE.DirectionalLight('#d5e6ff',1.25);fill.position.set(10,8,-5)
 // Repeated placements and procedural flower/snow variations share one catalog
 // entry. Keep their original templates and IDs for saved layouts and storage.
 const catalogFamilies=[
+  ['黄色花纹墙','wall-1','wall-3'],
+  ['红色花纹墙','wall-2','wall-4'],
+  ['矮砖墙','wall-5','wall-6','wall-7'],
   ['窗帘窗组','window-salon-a','window-salon-b'],
   ['黄铜壁灯','wall-sconce-1','wall-sconce-2','wall-sconce-3','wall-sconce-4','wall-sconce-5','wall-sconce-6'],
   ['复古扶手椅','salon-chair-a','salon-chair-b'],
@@ -236,14 +247,28 @@ const catalogFamilies=[
   ['古典台灯边桌','salon-lamp-a','salon-lamp-b','hearth-lamp-a','hearth-lamp-b'],
   ['花纹地毯','salon-rug','hearth-rug'],
   ['陶盆花卉','plant-salon','plant-stair','plant-hearth','plant-window','plant-balcony-a','plant-balcony-b'],
-  ['庭院雪顶花盆','garden-urn-1','garden-urn-2','garden-urn-3'],
-  ['积雪花灌木','garden-shrub-1','garden-shrub-2','garden-shrub-3'],
+  ['庭院花盆','garden-urn-1','garden-urn-2','garden-urn-3'],
+  ['庭院花灌木','garden-shrub-1','garden-shrub-2','garden-shrub-3'],
   ['庭院雪松','garden-pine-right','garden-pine-left'],
   ['庭院路灯','garden-streetlamp-left','garden-streetlamp-right']
 ];
 for(const [name,representative,...duplicates]of catalogFamilies){
   for(const id of [representative,...duplicates]){const spec=furnitureSpecs.find(item=>item.id===id);spec.catalogId=representative;spec.catalogName=name}
 }
+// Remove every original snow cap before batching or creating furniture copies.
+// Keep the original anchors so existing saved furniture transforms still align.
+world.updateMatrixWorld(true);
+for(const spec of furnitureSpecs){
+  if(spec.meshes.some(mesh=>mesh.material===M.snow)){
+    const bounds=new THREE.Box3();for(const mesh of spec.meshes)bounds.expandByObject(mesh);
+    spec.anchor=new THREE.Vector3((bounds.min.x+bounds.max.x)/2,bounds.min.y,(bounds.min.z+bounds.max.z)/2);
+    spec.meshes=spec.meshes.filter(mesh=>mesh.material!==M.snow);
+  }
+  spec.name=spec.name.replace('雪中庭院','庭院').replace('积雪花灌木','庭院花灌木').replace('雪顶花盆','花盆');
+}
+for(let i=staticMeshes.length-1;i>=0;i--)if(staticMeshes[i].material===M.snow){staticMeshes[i].removeFromParent();staticMeshes.splice(i,1)}
+for(let i=outdoorMeshes.length-1;i>=0;i--)if(outdoorMeshes[i].material===M.snow)outdoorMeshes.splice(i,1);
+const catalogAudit={unassigned:staticMeshes.filter(m=>!m.userData.furnitureId&&!m.userData.roomId&&!m.userData.surfaceId).map(m=>({position:m.position.toArray(),material:m.material.name})),assemblies:furnitureSpecs.map(s=>({id:s.id,category:s.category,catalogId:s.catalogId||s.id,meshes:s.meshes.length}))};
 const floorSystem=createFloorSystem({parent:world,specs:floorSpecs,mergeGeometries,anisotropy:Math.min(8,renderer.capabilities.getMaxAnisotropy())});
 const furnitureSystem=createFurnitureSystem({scene,specs:furnitureSpecs,mergeGeometries,floorSystem});
 const architectureSystem=createArchitectureSystem({system:furnitureSystem,foundationMeshes,outdoorMeshes,floorSystem,mergeGeometries});
@@ -254,7 +279,7 @@ for(const {mat,geos:gs}of buckets.values()){const geo=mergeGeometries(gs,false);
 // Fine drifting snow remains outside the open-roof rooms.
 const snowCount=700,snowPos=new Float32Array(snowCount*3),snowVel=[];
 for(let i=0;i<snowCount;i++){let x=(rnd()-.5)*24,z=(rnd()-.5)*22;if(Math.abs(x)<8&&z<4.7&&z>-5.1){if(rnd()>.5)x=Math.sign(x||1)*(8.2+rnd()*3);else z=5.1+rnd()*5}snowPos.set([x,1+rnd()*12,z],i*3);snowVel.push(.22+rnd()*.5)}
-const sg=new THREE.BufferGeometry();sg.setAttribute('position',new THREE.BufferAttribute(snowPos,3));const snowTexture=canvasTex((c,w,h)=>{const gr=c.createRadialGradient(w/2,h/2,0,w/2,h/2,w/2);gr.addColorStop(0,'#ffffff');gr.addColorStop(.35,'#ffffffe0');gr.addColorStop(1,'#ffffff00');c.fillStyle=gr;c.fillRect(0,0,w,h)},64,64);const snow=new THREE.Points(sg,new THREE.PointsMaterial({map:snowTexture,color:'#ffffff',size:.13,transparent:true,opacity:.88,depthWrite:false}));scene.add(snow);
+const sg=new THREE.BufferGeometry();sg.setAttribute('position',new THREE.BufferAttribute(snowPos,3));const snowTexture=canvasTex((c,w,h)=>{const gr=c.createRadialGradient(w/2,h/2,0,w/2,h/2,w/2);gr.addColorStop(0,'#ffffff');gr.addColorStop(.35,'#ffffffe0');gr.addColorStop(1,'#ffffff00');c.fillStyle=gr;c.fillRect(0,0,w,h)},64,64);const snow=new THREE.Points(sg,new THREE.PointsMaterial({map:snowTexture,color:'#ffffff',size:.13,transparent:true,opacity:.88,depthWrite:false}));snow.visible=false;scene.add(snow);
 
 // Camera presets and user controls.
 const views={overview:{p:[18,18,24],t:[0,2.3,1]},salon:{p:[3.5,10,16],t:[-4.4,2.3,-.1]},lobby:{p:[14,10,15],t:[3.8,2,-.1]},courtyard:{p:[9,9,19],t:[-1.2,.7,6.2]},top:{p:[0,38,1],t:[0,2.3,1]}};
@@ -284,13 +309,18 @@ createSceneMenu();
 function resizeScene(){const width=Math.max(1,mount.clientWidth),height=Math.max(1,mount.clientHeight);renderer.setSize(width,height);camera.aspect=width/height;camera.fov=THREE.MathUtils.radToDeg(2*Math.atan(Math.tan(THREE.MathUtils.degToRad(35)/2)*Math.max(1,1.18/camera.aspect)));camera.updateProjectionMatrix()}
 controls.addEventListener('start',()=>{tween=null});addEventListener('resize',resizeScene);
 scene.updateMatrixWorld(true);
-const buildingSystem=createBuildingSystem({scene,parent:world,system:furnitureSystem,floorSystem});
+const buildingSystem=createBuildingSystem({scene,parent:world,system:furnitureSystem,floorSystem,defaultPavings:[{id:'build-paving-2001',type:'paving',x:-6.6,z:6.64,width:4.1,depth:3.26,family:'tiles',style:'stone'},{id:'build-paving-2002',type:'paving',x:3.1,z:6.64,width:10,depth:3.26,family:'tiles',style:'stone'},{id:'build-paving-2003',type:'paving',x:-3.225,z:7.645,width:2.65,depth:1.25,family:'tiles',style:'stone'}],defaultRooms:[
+  {id:'build-room-1001',type:'room',x:-4,z:0,width:8,depth:10,level:1,color:'#c3b29c',floorStyle:'tile-checker',legacyFloor:'salon',roof:null},
+  {id:'build-room-1002',type:'room',x:4,z:0,width:8,depth:10,level:1,color:'#c3b29c',floorStyle:'wood-long',legacyFloor:'lobby',roof:null},
+  {id:'build-room-1003',type:'room',x:-4,z:-3.83,width:7.82,depth:1.84,level:2,elevation:3.9125,color:'#824920',floorStyle:'wood-long',legacyFloor:'balcony',roof:null}
+]});
 furnitureSystem.setConstruction(buildingSystem);
 furnitureSystem.setPlacement(createPlacement({surfaces:()=>world.children,architecture:architectureSystem,floorSystem,getFurniture:()=>furnitureSystem.all()}));
+furnitureSystem.setScatter(createScatterSystem({scene,system:furnitureSystem}));
 const editor=createSceneEditor({scene,camera,renderer,controls,furnitureSystem,occluders:world.children,onResize:resizeScene,toast,onInteract:()=>{tween=null;controls.autoRotate=false;toggle('rotate',false)},onBuildingView:(view,room)=>{stopCameraDrift();syncCameraView('overview');const target=room?new THREE.Vector3(room.x,buildingSystem.height(room)+1,room.z):new THREE.Vector3(0,view==='2'?4:2,0),distance=room?Math.max(room.width,room.depth)*1.25:18;const to=view==='roof'?target.clone().add(new THREE.Vector3(.1,distance*1.5,1)):target.clone().add(new THREE.Vector3(distance,distance*.9,distance*1.2));tween={start:performance.now(),from:camera.position.clone(),fromT:controls.target.clone(),to,toT:target}}});
 document.getElementById('camera-view-toggle').onclick=()=>{if(editor.dragging)return;editor.close();editor.builder?.close();const next=cameraView==='top'?'overview':'top';if(next==='overview')buildingSystem.setView('outside');goView(next)};
 resizeScene();
-let last=performance.now();function animate(now){requestAnimationFrame(animate);const dt=Math.min(.05,(now-last)/1000);last=now;const t=now*.001;if(tween){const a=Math.min(1,(now-tween.start)/1000),s=a*a*(3-2*a);camera.position.lerpVectors(tween.from,tween.to,s);controls.target.lerpVectors(tween.fromT,tween.toT,s);if(a===1)tween=null}for(const f of flames){f.mesh.scale.y=f.base*(.85+.15*Math.sin(t*9+f.phase));f.mesh.position.x+=Math.sin(t*6+f.phase)*dt*.014}firelight.intensity=(night?41:28)+Math.sin(t*10)*2;if(snow.visible){const p=sg.attributes.position;for(let i=0;i<snowCount;i++){p.array[i*3+1]-=snowVel[i]*dt;p.array[i*3]+=Math.sin(t*.35+i)*dt*.09;if(p.array[i*3+1]<.2)p.array[i*3+1]=12.4}p.needsUpdate=true}if(!editor.dragging)controls.update();editor.update();renderer.render(scene,camera)}
+let last=performance.now();function animate(now){requestAnimationFrame(animate);const dt=Math.min(.05,(now-last)/1000);last=now;const t=now*.001;buildingSystem.animate(t);if(tween){const a=Math.min(1,(now-tween.start)/1000),s=a*a*(3-2*a);camera.position.lerpVectors(tween.from,tween.to,s);controls.target.lerpVectors(tween.fromT,tween.toT,s);if(a===1)tween=null}for(const f of flames){f.mesh.scale.y=f.base*(.85+.15*Math.sin(t*9+f.phase));f.mesh.position.x+=Math.sin(t*6+f.phase)*dt*.014}firelight.intensity=(night?41:28)+Math.sin(t*10)*2;if(snow.visible){const p=sg.attributes.position;for(let i=0;i<snowCount;i++){p.array[i*3+1]-=snowVel[i]*dt;p.array[i*3]+=Math.sin(t*.35+i)*dt*.09;if(p.array[i*3+1]<.2)p.array[i*3+1]=12.4}p.needsUpdate=true}if(!editor.dragging)controls.update();editor.update();renderer.render(scene,camera)}
 requestAnimationFrame(animate);document.querySelector('#loading').classList.add('done');
 renderer.render(scene,camera);
-window.__sceneReady=true;window.__winterScene={scene,camera,controls,renderer,views,goView,editor,furnitureSystem,floorSystem,architectureSystem,snow,stats:{sourceMeshes:staticMeshes.length,batches:buckets.size,furniture:furnitureSystem.all().length,triangles:renderer.info.render.triangles},setNight:()=>document.querySelector('#night').click()};
+window.__sceneReady=true;window.__winterScene={scene,camera,controls,renderer,views,goView,editor,catalogAudit,furnitureSystem,floorSystem,architectureSystem,snow,stats:{sourceMeshes:staticMeshes.length,batches:buckets.size,furniture:furnitureSystem.all().length,triangles:renderer.info.render.triangles},setNight:()=>document.querySelector('#night').click()};

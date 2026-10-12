@@ -5,11 +5,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import * as THREE from './vendor/three.module.js';
 import {createSceneEditor} from './editor.js';
+import {checkScatter} from './check-scatter.mjs';
 import {arcPoint,angleFromArcPoint,ROTATION_ARC,compactButtonArc} from './object-controls.js';
 import {checkThumbnails} from './check-thumbnails.mjs';
 import {checkArchitecture} from './check-architecture.mjs';
 import {checkWallHandles} from './check-wall-handles.mjs';
 import {checkBuildingControls} from './check-building-controls.mjs';
+import {pickSceneSurface} from './scene-picking.js';
+import {checkSelection} from './check-selection.mjs';
 const {scene,camera,renderer,furnitureSystem:system}=window.__winterScene;
 const sofa=system.get('salon-sofa'),initial=system.serialize();
 const test=(name,fn)=>{fn();cases.push(name)};
@@ -39,14 +42,15 @@ class Element{
   closest(){return ['INPUT','TEXTAREA','SELECT'].includes(this.tagName)?this:null}
   getRootNode(){return document}
   focus(){}
+  showModal(){this.open=true}
+  close(){this.open=false}
 }
 const html=fs.readFileSync(new URL('./index.html',import.meta.url),'utf8'),elements=new Map();
 for(const match of html.matchAll(/<([a-z][a-z0-9]*)\b[^>]*\bid="([^"]+)"[^>]*>/g))elements.set(match[2],new Element(match[1]));
-const libraryTabs=[...html.matchAll(/data-library-tab="([^"]+)"/g)].map(m=>{const el=new Element('button');el.dataset.libraryTab=m[1];return el});
 const categories=[...html.matchAll(/data-category="([^"]+)"/g)].map(m=>{const el=new Element('button');el.dataset.category=m[1];return el});
 const body=new Element('body');body.classList.add('editor-open');
 const docEvents=new Element();
-globalThis.document={body,getElementById:id=>{assert.ok(elements.has(id),'HTML element exists: '+id);return elements.get(id)},createElement:tag=>new Element(tag),querySelector:()=>null,querySelectorAll:s=>s==='[data-library-tab]'?libraryTabs:s==='[data-category]'?categories:[],addEventListener:(...args)=>docEvents.addEventListener(...args),removeEventListener:(...args)=>docEvents.removeEventListener(...args)};
+globalThis.document={body,getElementById:id=>{assert.ok(elements.has(id),'HTML element exists: '+id);return elements.get(id)},createElement:tag=>new Element(tag),querySelector:()=>null,querySelectorAll:s=>s==='[data-category]'?categories:[],addEventListener:(...args)=>docEvents.addEventListener(...args),removeEventListener:(...args)=>docEvents.removeEventListener(...args)};
 const winEvents=new Element();window.addEventListener=(...args)=>winEvents.addEventListener(...args);window.matchMedia=()=>({matches:false});
 const storage=new Map();globalThis.localStorage={getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)};
 const canvas=new Element('canvas');renderer.domElement=canvas;
@@ -55,7 +59,7 @@ const world=scene.getObjectByName('Architecture');assert.ok(world);
 const thumbnailFactory=()=>({request:(record,image)=>{image.src='mock-model:'+record.sourceId+':'+record.color},update:()=>{},clearPending:()=>{}});
 let resizeCalls=0;
 const editor=createSceneEditor({scene,camera,renderer,controls,furnitureSystem:system,occluders:world.children,thumbnailFactory,onResize:()=>resizeCalls++});
-const $=id=>elements.get(id),tabButton=tab=>libraryTabs.find(b=>b.dataset.libraryTab===tab);
+const $=id=>elements.get(id);
 $('rotation-arc').rect={left:100,top:100,width:ROTATION_ARC.width,height:ROTATION_ARC.height};
 function overhead(){camera.position.set(.1,27,2.4);controls.target.set(0,0,1);controls.update();camera.updateMatrixWorld(true);scene.updateMatrixWorld(true)}
 function project(position){const p=position.clone().project(camera);return{clientX:(p.x+1)*800,clientY:(1-p.y)*550}}
@@ -99,7 +103,27 @@ test('arc rotation previews stay pending until the green check, with one undo st
   assert.ok(Math.abs(sofa.root.rotation.y-Math.PI)<1e-9);assert.equal(system.historyLength,before);assert.equal($('arc-value').textContent,'180°');$('object-confirm').click();assert.equal(editor.mode,null);assert.equal($('object-ui').hidden,true);assert.equal(system.historyLength,before+1);system.undo();assert.equal(sofa.root.rotation.y,0);system.redo();assert.equal(sofa.root.rotation.y,Math.PI);
 });
 test('360 endpoint remains labelled 360, and keyboard arc changes are accessible',()=>{
-  editor.select(sofa.id);assert.equal($('object-color').hidden,false);assert.equal($('object-delete').hidden,false);$('object-rotate').click();arcSlide(180,360);assert.equal($('arc-value').textContent,'360°');assert.equal(sofa.root.rotation.y,0);assert.equal($('rotation-arc').attributes['aria-valuenow'],'360');$('rotation-arc').emit('keydown',{key:'Home'});assert.equal($('arc-value').textContent,'0°');$('rotation-arc').emit('keydown',{key:'ArrowRight',shiftKey:true});assert.equal($('arc-value').textContent,'15°');editor.close(false);
+  editor.select(sofa.id);assert.equal($('object-color').hidden,false);assert.equal($('object-delete').hidden,false);$('object-rotate').click();arcSlide(180,360);assert.equal($('arc-value').textContent,'360°');assert.equal(sofa.root.rotation.y,0);assert.equal($('rotation-arc').attributes['aria-valuenow'],'360');$('rotation-arc').emit('keydown',{key:'Home'});assert.equal($('arc-value').textContent,'0°');$('rotation-arc').emit('keydown',{key:'ArrowRight',shiftKey:true});assert.equal($('arc-value').textContent,'30°');$('rotation-arc').emit('keydown',{key:'PageUp'});assert.equal($('arc-value').textContent,'60°');$('rotation-arc').emit('keydown',{key:'ArrowLeft'});assert.equal($('arc-value').textContent,'30°');editor.close(false);
+});
+test('rotation snaps to 30-degree ticks on dragging and track taps',()=>{
+  editor.select(sofa.id);editor.beginMode('rotate');const arc=$('rotation-arc');
+  assert.equal(($('arc-ticks').attributes.d.match(/M/g)||[]).length,13);
+  for(const [input,expected]of [[14.9,0],[15.1,30],[44.9,30],[45.1,60],[344.9,330],[345.1,360]]){
+    arc.emit('keydown',{key:'Home'});arcSlide(0,input);assert.equal($('arc-value').textContent,expected+'°');assert.ok(Math.abs(sofa.root.rotation.y-THREE.MathUtils.degToRad(expected%360))<1e-9);
+    arc.emit('keydown',{key:'Home'});arcSlide(0,180);
+    arc.emit('pointerdown',arcEvent(input));arc.emit('pointerup',arcEvent(input));assert.equal($('arc-value').textContent,expected+'°');
+  }
+  editor.close(false);
+});
+test('cancelling a snapped drag preserves an existing off-grid angle',()=>{
+  editor.select(sofa.id);editor.beginMode('rotate');assert.equal(system.rotationPreview(sofa.id,17.4),true);editor.beginMode('rotate');
+  const before=sofa.root.rotation.y,history=system.historyLength,arc=$('rotation-arc');assert.equal($('arc-value').textContent,'17°');
+  for(const cancel of ['pointercancel','lostpointercapture','blur']){
+    arc.emit('pointerdown',arcEvent(17));arc.emit('pointermove',arcEvent(80));assert.equal($('arc-value').textContent,'90°');
+    if(cancel==='blur')winEvents.emit('blur');else arc.emit(cancel,arcEvent(80));
+    assert.ok(Math.abs(sofa.root.rotation.y-before)<1e-9);assert.equal($('arc-value').textContent,'17°');assert.equal(system.historyLength,history);
+  }
+  arcSlide(17,80);winEvents.emit('keydown',{key:'Escape'});assert.ok(Math.abs(sofa.root.rotation.y-before)<1e-9);assert.equal(system.historyLength,history);
 });
 test('clicking the arc label does not jump the rotation, and pointer cancel rolls back the slider',()=>{
   editor.select(sofa.id);$('object-rotate').click();const before=sofa.root.rotation.y,arc=$('rotation-arc');arc.emit('pointerdown',{clientX:280,clientY:188});assert.equal(editor.dragging,false);assert.equal(sofa.root.rotation.y,before);
@@ -148,16 +172,16 @@ test('cancelled move pointer restores that drag, and Escape restores the whole o
   canvas.emit('pointerdown',p);canvas.emit('pointermove',{...p,clientX:p.clientX+24});canvas.emit('pointerup',p);winEvents.emit('keydown',{key:'Escape'});assert.equal(snapshot(),before);assert.equal(editor.selectedId,null);
 });
 test('delete and library restore retain color and location and close object UI',()=>{
-  editor.select(sofa.id);const before=snapshot();$('object-delete').click();assert.equal(sofa.root.visible,false);assert.equal(editor.selectedId,null);assert.equal($('removed-count').textContent,'1');const card=$('library-list').children.find(c=>c.dataset.itemId===sofa.id);card.click();assert.equal(sofa.root.visible,true);assert.equal(snapshot(),before);assert.equal(editor.mode,'move');
+  editor.select(sofa.id);const before=snapshot();$('object-delete').click();assert.equal(sofa.root.visible,false);assert.equal(editor.selectedId,null);const card=$('library-list').children.find(c=>c.dataset.itemId===sofa.id);assert.equal(card.dataset.restoreId,sofa.id);card.click();assert.equal(sofa.root.visible,true);assert.equal(snapshot(),before);assert.equal(editor.mode,'move');
 });
 test('catalog addition enters move mode and supports confirm and autosave',()=>{
-  tabButton('catalog').click();assert.equal($('library-search'),undefined);const count=system.all().length;$('library-list').children.find(c=>c.dataset.itemId==='salon-sofa').click();assert.equal(system.all().length,count+1);assert.ok(editor.selectedId.startsWith('copy-'));assert.equal(editor.mode,'move');$('object-confirm').click();assert.deepEqual(JSON.parse(storage.get(editor.storageKey)),system.serialize());
+  editor.setCategory('all');assert.equal($('library-search'),undefined);const count=system.all().length;$('library-list').children.find(c=>c.dataset.itemId==='salon-sofa').click();assert.equal(system.all().length,count+1);assert.ok(editor.selectedId.startsWith('copy-'));assert.equal(editor.mode,'move');$('object-confirm').click();assert.deepEqual(JSON.parse(storage.get(editor.storageKey)),system.serialize());
 });
 test('browsing mode allows camera orbit and suppresses the object menu',()=>{
   editor.setEditing(false);tap(findHit());assert.equal(editor.selectedId,null);assert.equal($('object-ui').hidden,true);editor.setEditing(true);
 });
 test('undo/redo shortcuts and keyboard typing remain separate',()=>{
-  editor.select(sofa.id);winEvents.emit('keydown',{key:'r',target:new Element('input')});assert.equal(editor.mode,'move');winEvents.emit('keydown',{key:'r'});assert.equal(editor.mode,'rotate');arcSlide(0,45);$('object-confirm').click();winEvents.emit('keydown',{key:'z',ctrlKey:true});assert.equal(sofa.root.rotation.y,0);winEvents.emit('keydown',{key:'z',ctrlKey:true,shiftKey:true});assert.equal(sofa.root.rotation.y,Math.PI/4);
+  editor.select(sofa.id);winEvents.emit('keydown',{key:'r',target:new Element('input')});assert.equal(editor.mode,'move');winEvents.emit('keydown',{key:'r'});assert.equal(editor.mode,'rotate');arcSlide(0,60);$('object-confirm').click();winEvents.emit('keydown',{key:'z',ctrlKey:true});assert.equal(sofa.root.rotation.y,0);winEvents.emit('keydown',{key:'z',ctrlKey:true,shiftKey:true});assert.equal(sofa.root.rotation.y,Math.PI/3);
 });
 test('button edge gaps are halved without overlap at desktop and narrow widths',()=>{
   for(const width of [320,360])for(const sizes of [[44,44,44,44],[38,38,38,38,38,38,44],[44,44]]){
@@ -165,12 +189,12 @@ test('button edge gaps are halved without overlap at desktop and narrow widths',
     for(let i=1;i<points.length;i++){const edge=(sizes[i-1]+sizes[i])/2,gap=Math.hypot(points[i].x-points[i-1].x,points[i].y-points[i-1].y)-edge;assert.ok(gap>=0);assert.ok(Math.abs(gap-Math.max(0,oldDistance-edge)/2)<1e-8)}
   }
 });
-function libraryCard(id,tab='catalog'){
-  editor.close();editor.setTab(tab);
-  const card=$('library-list').children.find(c=>c.dataset.itemId===id);assert.ok(card,id);return card;
+function libraryCard(id){
+  editor.close();editor.setCategory('all');
+  const card=$('library-list').children.find(c=>c.dataset.restoreId===id||c.dataset.itemId===id);assert.ok(card,id);return card;
 }
 const libraryPoint={clientX:1730,clientY:400};
-function startLibraryDrag(id,point,tab){const card=libraryCard(id,tab);card.emit('pointerdown',libraryPoint);winEvents.emit('pointermove',point);return card}
+function startLibraryDrag(id,point){const card=libraryCard(id);card.emit('pointerdown',libraryPoint);winEvents.emit('pointermove',point);return card}
 test('component library uses model previews with accessible names and no visible name text',()=>{
   const card=libraryCard('salon-chair-a');assert.equal(card.tagName,'BUTTON');assert.equal(card.textContent,'');assert.equal(card.children.length,1);assert.equal(card.children[0].tagName,'IMG');assert.ok(card.children[0].src.startsWith('mock-model:'));assert.ok(card.attributes['aria-label'].includes('扶手椅'));
 });
@@ -198,50 +222,64 @@ test('stored models drag back with their existing identity/color, and undo retur
   editor.close();const id='plant-balcony-a';system.setColor(id,'#638b9c');system.remove(id);const before=snapshot(),r=system.get(id),count=system.all().length;
   const point=project(new THREE.Vector3(8.2,.3,6));startLibraryDrag(id,point,'removed');assert.equal(r.root.visible,true);winEvents.emit('pointerup',point);assert.equal(editor.selectedId,id);assert.equal(r.color,'#638b9c');assert.ok(r.root.position.y<.7);assert.equal(system.all().length,count);editor.close();system.undo();assert.equal(snapshot(),before);assert.equal(r.root.visible,false);
 });
-test('dragging from placed tab moves the existing item; cancelling restores its transform',()=>{
-  const id='salon-chair-b',point=project(new THREE.Vector3(9,.14,7.5)),before=snapshot(),count=system.all().length;
-  startLibraryDrag(id,point,'placed');winEvents.emit('pointercancel',point);assert.equal(snapshot(),before);
-  startLibraryDrag(id,point,'placed');winEvents.emit('pointerup',point);assert.equal(editor.selectedId,id);assert.equal(system.all().length,count);assert.ok(system.get(id).root.position.x>8);editor.close();system.undo();assert.equal(snapshot(),before);
+test('similar lamps share one card, and stored variants restore one by one without copies',()=>{
+  editor.close();const before=system.serialize();editor.setCategory('lighting');
+  assert.deepEqual($('library-list').children.map(c=>c.dataset.itemId),['salon-lamp-a','garden-streetlamp-left']);
+  const count=system.all().length,ids=['salon-lamp-b','hearth-lamp-a'];system.setColor(ids[0],'#638b9c');for(const id of ids)system.remove(id);
+  const removed=system.serialize();assert.equal($('library-list').children.length,2);
+  const point=project(new THREE.Vector3(9,.14,7.5));startLibraryDrag(ids[0],point);winEvents.emit('pointercancel',point);assert.deepEqual(system.serialize(),removed);
+  for(const id of ids){editor.setCategory('lighting');const card=$('library-list').children.find(c=>c.dataset.itemId==='salon-lamp-a');assert.equal(card.dataset.restoreId,id);card.emit('pointerdown',libraryPoint);winEvents.emit('pointerup',libraryPoint);card.click();assert.equal(editor.selectedId,id);assert.equal(system.all().length,count);editor.close();assert.equal($('library-list').children.length,2)}
+  assert.equal(system.get(ids[0]).color,'#638b9c');assert.deepEqual(system.get(ids[0]).root.position.toArray(),removed.items.find(r=>r.id===ids[0]).position);
+  system.loadSaved(system.serialize());editor.setCategory('lighting');assert.equal($('library-list').children.length,2);
+  system.load(before);editor.setCategory('all');
 });
 const floors=system.floorSystem;
 function findFloor(id){
-  scene.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(floors.get(id).base);
+  scene.updateMatrixWorld(true);const floor=floors.get(id),box=new THREE.Box3().setFromObject(floor.base),ray=new THREE.Raycaster();
   for(const fx of [.2,.4,.6,.8])for(const fz of [.2,.4,.6,.8]){
     const point=project(new THREE.Vector3(THREE.MathUtils.lerp(box.min.x,box.max.x,fx),box.max.y,THREE.MathUtils.lerp(box.min.z,box.max.z,fz)));
-    if(!editor.pick(point)&&editor.pickFloor(point)?.object.userData.floorId===id)return point;
-  }
-  throw new Error('No exposed floor found for '+id);
+    ray.setFromCamera(new THREE.Vector2(point.clientX/800-1,1-point.clientY/550),camera);
+    if(pickSceneSurface(ray,{system,occluders:world.children})?.object.userData.buildId===floor.id)return point;
+  }throw new Error('No exposed foundation found for '+id);
 }
-test('floor clicks open four texture choices; drags orbit and occluded floors cannot be selected',()=>{
-  editor.close();overhead();assert.equal(floors.styles.length,4);assert.equal(floors.styles.filter(s=>s.kind==='wood').length,2);assert.equal(floors.styles.filter(s=>s.kind==='tile').length,2);
-  for(const id of ['salon','lobby','balcony']){const p=findFloor(id);tap(p);assert.equal(editor.selectedFloorId,id);assert.equal(editor.mode,'floor');assert.equal($('floor-ui').hidden,false);assert.equal($('floor-options').children.length,4);assert.equal($('object-ui').hidden,true);$('floor-confirm').click();assert.equal($('floor-ui').hidden,true)}
-  const p=findFloor('lobby'),cameraBefore=camera.position.clone();canvas.emit('pointerdown',{...p,timeStamp:100});canvas.emit('pointermove',{...p,clientX:p.clientX+45,timeStamp:160});canvas.emit('pointerup',{...p,clientX:p.clientX+45,timeStamp:210});assert.ok(camera.position.distanceTo(cameraBefore)>.1);assert.equal(editor.selectedFloorId,null);overhead();
-  assert.equal(editor.pickFloor(findHit(sofa.id)),null);assert.equal(editor.pickFloor(project(new THREE.Vector3(9,.14,7.5))),null);
+test('default room floors are component foundations and clicks open the same foundation actions',()=>{
+  editor.close();overhead();assert.equal(floors.styles.length,7);assert.equal(floors.styles.filter(s=>s.kind==='wood').length,3);
+  for(const id of ['salon','lobby','balcony']){const p=findFloor(id);tap(p);assert.equal(editor.builder.selectedId,floors.get(id).id);assert.equal(editor.selectedFloorId,null);assert.equal($('floor-ui').hidden,true);$('build-material').click();assert.equal($('build-options').children.length,7);assert.equal($('build-floor-rotate').hidden,false);$('build-confirm').click()}
+  const p=findFloor('lobby'),before=camera.position.clone();canvas.emit('pointerdown',{...p,timeStamp:100});canvas.emit('pointermove',{...p,clientX:p.clientX+45,timeStamp:160});canvas.emit('pointerup',{...p,clientX:p.clientX+45,timeStamp:210});assert.ok(camera.position.distanceTo(before)>.1);assert.equal(editor.builder.selectedId,null);overhead();
 });
-test('floor materials change only one room, remove old tiles, and commit/undo as one edit',()=>{
-  const before=snapshot(),history=system.historyLength,other=floors.get('lobby').base.material,room=floors.get('salon'),furnitureBefore=system.serialize().items;
-  tap(findFloor('salon'));for(const button of $('floor-options').children)button.click();
-  assert.equal(room.styleId,'tile-floral');assert.equal(room.details.parent,null);assert.equal(floors.get('lobby').base.material,other);assert.deepEqual(system.serialize().items,furnitureBefore);assert.equal(system.historyLength,history);
-  $('floor-confirm').click();assert.equal(system.historyLength,Math.min(40,history+1));const after=snapshot();assert.deepEqual(JSON.parse(storage.get(editor.storageKey)),system.serialize());
-  system.undo();assert.equal(snapshot(),before);assert.equal(room.details.parent,room.root);system.redo();assert.equal(snapshot(),after);assert.equal(room.details.parent,null);
+test('long plank texture rotation is independent, repeats at physical density, and supports undo/save',()=>{
+  editor.builder.close();const before=system.serialize(),history=system.historyLength,other=floors.get('lobby').styleId,items=system.serialize().items,id=floors.get('salon').id;
+  tap(findFloor('salon'));$('build-material').click();$('build-options').children.find(b=>b.attributes['aria-label']==='横长条木地板').click();$('build-floor-rotate').click();
+  assert.equal(floors.get(id).styleId,'wood-long');assert.equal(system.construction.room(id).floorRotation,90);assert.equal(floors.get('lobby').styleId,other);assert.deepEqual(system.serialize().items,items);
+  const floor=floors.get(id),map=floor.materials.get('wood-long').map;assert.equal(map.rotation,Math.PI/2);assert.equal(map.repeat.x,floor.depth/4.8);assert.equal(map.repeat.y,floor.width/4.8);
+  $('build-confirm').click();const saved=system.serialize();assert.equal(system.historyLength,Math.min(history+1,40));system.undo();assert.deepEqual(system.serialize(),before);system.redo();assert.deepEqual(system.serialize(),saved);system.loadSaved(saved);assert.deepEqual(system.serialize(),saved);assert.equal(floors.get(id).materials.get('wood-long').map.rotation,Math.PI/2);
 });
-test('floor switching, furniture selection, blank clicks and Escape settle previews correctly',()=>{
-  tap(findFloor('salon'));$('floor-options').children[0].click();tap(findFloor('lobby'));assert.equal(floors.get('salon').styleId,'wood-planks');assert.equal(editor.selectedFloorId,'lobby');
-  $('floor-options').children[1].click();tap(blank);assert.equal(floors.get('lobby').styleId,'wood-herringbone');assert.equal(editor.selectedFloorId,null);assert.equal($('floor-ui').hidden,true);
-  tap(findFloor('lobby'));$('floor-options').children[2].click();winEvents.emit('keydown',{key:'Escape'});assert.equal(floors.get('lobby').styleId,'wood-herringbone');assert.equal(editor.selectedFloorId,null);
-  tap(findFloor('balcony'));$('floor-options').children[2].click();editor.select(sofa.id);assert.equal($('floor-ui').hidden,true);assert.equal(floors.get('balcony').styleId,'tile-checker');assert.equal(editor.mode,'move');editor.close();
-  tap(findFloor('lobby'));winEvents.emit('keydown',{key:'Enter'});assert.equal(editor.selectedFloorId,null);assert.equal($('floor-ui').hidden,true);
-  assert.notEqual(floors.get('salon').materials.get('wood-planks').map,floors.get('lobby').materials.get('wood-planks').map);
+test('default foundation texture previews cancel, confirm and keep four rotation orientations',()=>{
+  const id=floors.get('lobby').id,before=system.serialize();tap(findFloor('lobby'));$('build-material').click();
+  for(const angle of [90,180,270,0]){$('build-floor-rotate').click();assert.equal(system.construction.room(id).floorRotation,angle)}
+  $('build-options').children[1].click();winEvents.emit('keydown',{key:'Escape'});assert.deepEqual(system.serialize(),before);assert.equal(editor.builder.selectedId,null);
+  tap(findFloor('lobby'));$('build-material').click();$('build-options').children[1].click();$('build-confirm').click();assert.equal(floors.get('lobby').styleId,'wood-herringbone');
 });
-test('floor styles survive saved layouts and legacy layouts retain their original floor finishes',()=>{
-  const saved=system.serialize();system.load(initial);assert.ok(floors.all().every(r=>r.styleId===null));system.loadSaved(saved);assert.deepEqual(system.serialize(),saved);
-  const legacy=structuredClone(saved);delete legacy.floors;system.loadSaved(legacy);assert.ok(floors.all().every(r=>r.styleId===null));assert.deepEqual(system.serialize().items,saved.items);system.loadSaved(saved);
+test('legacy floor finishes migrate onto default components without resetting placed furniture',()=>{
+  const saved=system.serialize(),legacy=structuredClone(saved);delete legacy.building.componentDefaults;legacy.building.rooms=legacy.building.rooms.filter(r=>!r.legacyFloor);legacy.floors={salon:'wood-herringbone',lobby:'tile-floral',balcony:'wood-planks'};
+  system.loadSaved(legacy);assert.equal(floors.get('salon').styleId,'wood-herringbone');assert.equal(floors.get('lobby').styleId,'tile-floral');assert.equal(floors.get('balcony').styleId,'wood-planks');assert.deepEqual(system.serialize().items,saved.items);const migrated=system.serialize();system.loadSaved(migrated);assert.deepEqual(system.serialize(),migrated);system.load(saved);
 });
 checkArchitecture({system,scene,camera,editor,canvas,controls,$,winEvents,project,tap,findHit,startLibraryDrag,test});
 checkWallHandles({system,scene,camera,editor,canvas,controls,$,winEvents,project,test});
 checkBuildingControls({system,scene,camera,editor,canvas,controls,$,winEvents,project,tap,test,initial});
+checkSelection({system,scene,camera,editor,canvas,controls,project,tap,test,initial});
+checkScatter({system,scene,camera,editor,controls,canvas,tap,$,winEvents,categories,project,test,initial,storage});
+test('railing side strips resize in touch editing and stair color menus contain exactly three finishes',()=>{
+  editor.close();editor.builder.close();system.load(initial);const r=system.add('balcony-railing');system.move(r.id,24,0,.14);camera.position.set(24,10,12);controls.target.set(24,0,0);controls.update();camera.updateMatrixWorld(true);editor.select(r.id);
+  const handles=scene.getObjectByName('WallResizeHandles'),right=handles.getObjectByName('WallResize-right');assert.equal(handles.visible,true);assert.equal(handles.getObjectByName('WallResize-top').visible,false);
+  const before=system.serialize(),width=r.railingWidth,start=project(right.getWorldPosition(new THREE.Vector3())),end=project(right.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(1,0,0))),cam=camera.position.clone();
+  canvas.emit('pointerdown',{...start,pointerType:'touch'});assert.equal(right.userData.resizeActive,true);canvas.emit('pointermove',{...end,pointerType:'touch'});assert.ok(r.railingWidth>width+.8);canvas.emit('pointercancel',end);assert.deepEqual(system.serialize(),before);assert.ok(camera.position.equals(cam));
+  canvas.emit('pointerdown',start);canvas.emit('pointermove',end);canvas.emit('pointerup',end);$('object-confirm').click();const saved=system.serialize();system.undo();assert.deepEqual(system.serialize(),before);system.redo();assert.deepEqual(system.serialize(),saved);
+  for(const id of [r.id,'stair-left','stair-right','stair-entrance']){editor.select(id);$('object-color').click();assert.equal($('object-palette').children.length,3);assert.deepEqual($('object-palette').children.map(b=>b.attributes['aria-label']),['胡桃木色','原木色','白色']);$('object-palette').children[2].click();assert.equal(system.get(id).color,'#f4f1e8');$('object-confirm').click()}
+  editor.select(sofa.id);$('object-color').click();assert.equal($('object-palette').children.length,6);editor.close(false);system.load(initial);overhead();
+});
 test('library collapse preserves browsing and active edits while resizing the scene both ways',()=>{
-  editor.setTab('catalog');categories.find(b=>b.dataset.category==='seating').click();editor.select(sofa.id);editor.beginMode('rotate');
+  editor.setCategory('all');categories.find(b=>b.dataset.category==='seating').click();editor.select(sofa.id);editor.beginMode('rotate');
   $('library-list').scrollLeft=148;const cards=[...$('library-list').children],before=system.serialize(),history=system.historyLength,resizes=resizeCalls;
   $('library-collapse-toggle').click();assert.equal(editor.libraryCollapsed,true);assert.equal($('editor-panel').hidden,true);assert.ok(body.classList.contains('library-collapsed'));assert.equal($('library-collapse-toggle').attributes['aria-expanded'],'false');assert.equal(editor.selectedId,sofa.id);assert.equal(editor.mode,'rotate');assert.equal(resizeCalls,resizes+1);
   $('library-collapse-toggle').click();assert.equal(editor.libraryCollapsed,false);assert.equal($('editor-panel').hidden,false);assert.equal($('library-collapse-toggle').attributes['aria-expanded'],'true');assert.equal(resizeCalls,resizes+2);assert.equal($('library-list').scrollLeft,148);assert.deepEqual($('library-list').children,cards);assert.deepEqual(system.serialize(),before);assert.equal(system.historyLength,history);

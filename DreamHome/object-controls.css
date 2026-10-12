@@ -1,5 +1,5 @@
 .selection-tip{font-size:11px;line-height:1.9;color:#829081;margin:0}
-.floor-ui{position:fixed;z-index:2;width:280px;height:84px;pointer-events:none;user-select:none}
+.floor-ui{position:fixed;z-index:2;width:280px;max-width:calc(100vw - 24px);height:136px;pointer-events:none;user-select:none}
 .floor-options{display:contents}
 .orbit-button.floor-option{width:48px;height:48px;overflow:hidden;border:3px solid #fffdf1;background:#e5dcc8}
 .floor-option img{width:100%;height:100%;object-fit:cover;pointer-events:none;user-select:none}
@@ -16,7 +16,10 @@
 .orbit-button.object-confirm{color:#fffef1;border-color:#cce9ae;background:linear-gradient(145deg,#8abd6c,#4c8e41)}
 .object-confirm>span{font-size:26px;font-weight:700;line-height:1;pointer-events:none}
 #object-rotation{position:absolute;left:52px;right:52px;pointer-events:none}
-.rotation-arc{display:block;width:100%;height:auto;touch-action:none;overflow:visible;pointer-events:none;filter:drop-shadow(0 2px 3px #24393330)}
+.rotation-arc{display:block;width:100%;height:auto;touch-action:none;overflow:visible;pointer-events:none;-webkit-tap-highlight-color:transparent;filter:drop-shadow(0 2px 3px #24393330)}
+#rotation-arc,#rotation-arc:focus,#rotation-arc:focus-visible{outline:none!important;outline-offset:0;border:0;box-shadow:none}
+.orbit-button:focus:not(:focus-visible){outline:none}
+.rotation-arc:focus-visible .arc-thumb{stroke:#365d3b;stroke-width:6;filter:drop-shadow(0 0 3px #8eb581)}
 .arc-hit{fill:none;stroke:transparent;stroke-width:44;stroke-linecap:round;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:ew-resize}
 .arc-track{fill:none;stroke:#ffffe8;stroke-width:8;stroke-linecap:round;pointer-events:none}
 .arc-progress{fill:none;stroke:#76a46b;stroke-width:8;stroke-linecap:round;pointer-events:none}

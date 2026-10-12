@@ -19,7 +19,7 @@ export function createModelThumbnails(renderer){
   const canvas=document.createElement('canvas');canvas.width=canvas.height=size;const ctx=canvas.getContext('2d');
   const pixels=new Uint8Array(size*size*4),cache=new Map(),queue=new Map();
   function request(record,image){
-    const key=[record.sourceId,record.color||'original',record.root.rotation.y.toFixed(3),record.wallMaterial||'',record.root.scale.toArray().join(',')].join(':');
+    const key=[record.sourceId,record.color||'original',record.root.rotation.y.toFixed(3),record.wallMaterial||'',record.railingWidth||'',record.root.scale.toArray().join(',')].join(':');
     if(cache.has(key)){image.src=cache.get(key);return}
     if(!queue.has(key))queue.set(key,{record,images:[]});queue.get(key).images.push(image);
   }
@@ -29,11 +29,13 @@ export function createModelThumbnails(renderer){
     const {model,camera}=frameThumbnail(record);scene.add(model);
     const state={target:renderer.getRenderTarget(),viewport:renderer.getViewport(new THREE.Vector4()),scissor:renderer.getScissor(new THREE.Vector4()),scissorTest:renderer.getScissorTest(),clear:renderer.getClearColor(new THREE.Color()),alpha:renderer.getClearAlpha(),autoClear:renderer.autoClear,shadows:renderer.shadowMap.enabled,exposure:renderer.toneMappingExposure};
     try{
-      renderer.shadowMap.enabled=false;renderer.toneMappingExposure=1.1;renderer.autoClear=true;renderer.setRenderTarget(target);renderer.setViewport(0,0,size,size);renderer.setScissorTest(false);renderer.render(scene,camera);renderer.readRenderTargetPixels(target,0,0,size,size,pixels);
+      // Binding the target uses its pixel-sized viewport. setViewport would
+      // multiply by the display pixel ratio again and crop high-DPI previews.
+      renderer.shadowMap.enabled=false;renderer.toneMappingExposure=1.1;renderer.autoClear=true;renderer.setRenderTarget(target);renderer.render(scene,camera);renderer.readRenderTargetPixels(target,0,0,size,size,pixels);
       const data=ctx.createImageData(size,size);for(let y=0;y<size;y++)data.data.set(pixels.subarray((size-1-y)*size*4,(size-y)*size*4),y*size*4);ctx.putImageData(data,0,0);
       const url=canvas.toDataURL('image/png');cache.set(key,url);if(cache.size>160)cache.delete(cache.keys().next().value);for(const image of images)image.src=url;
     }finally{
-      model.removeFromParent();renderer.setRenderTarget(state.target);renderer.setViewport(state.viewport);renderer.setScissor(state.scissor);renderer.setScissorTest(state.scissorTest);renderer.setClearColor(state.clear,state.alpha);renderer.autoClear=state.autoClear;renderer.shadowMap.enabled=state.shadows;renderer.toneMappingExposure=state.exposure;
+      model.removeFromParent();renderer.setViewport(state.viewport);renderer.setScissor(state.scissor);renderer.setScissorTest(state.scissorTest);renderer.setRenderTarget(state.target);renderer.setClearColor(state.clear,state.alpha);renderer.autoClear=state.autoClear;renderer.shadowMap.enabled=state.shadows;renderer.toneMappingExposure=state.exposure;
     }
   }
   function clearPending(){queue.clear()}

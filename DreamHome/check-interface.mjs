@@ -5,7 +5,7 @@ const html=fs.readFileSync(new URL('./index.html',import.meta.url),'utf8'),ids=[
 const check=(name,fn)=>{fn();cases.push(name)};
 check('all DOM IDs are unique and every literal runtime element reference exists',()=>{
   assert.equal(new Set(ids).size,ids.length);
-  for(const file of ['scene.js','editor.js','building-controls.js','scene-menu.js','object-controls.js','floor-controls.js']){
+  for(const file of ['scene.js','editor.js','building-controls.js','scene-menu.js','object-controls.js','floor-controls.js','scatter-controls.js']){
     const source=fs.readFileSync(new URL(file,import.meta.url),'utf8');
     for(const m of source.matchAll(/(?:\$|getElementById)\('([\w-]+)'\)/g))assert.ok(ids.includes(m[1]),file+': '+m[1]);
   }
@@ -21,6 +21,11 @@ check('bottom dock styles reserve scene space and cover narrow phones, landscape
 });
 check('one accessible camera toggle replaces the four level buttons',()=>{
   assert.equal(ids.filter(id=>id==='camera-view-toggle').length,1);assert.ok(html.includes('aria-label="切换到俯视"'));assert.equal(html.includes('data-building-view='),false);assert.equal(ids.includes('building-views'),false);
+});
+check('component library has one category row, with construction categories and no parent tabs',()=>{
+  assert.equal(html.includes('data-library-tab='),false);assert.equal(ids.includes('build-categories'),false);assert.equal(ids.includes('removed-count'),false);
+  const categories=[...html.matchAll(/data-category="([^"]+)"/g)].map(m=>m[1]);assert.equal(new Set(categories).size,categories.length);
+  for(const name of ['all','props','lighting','foundation','walls','doors','roofs'])assert.ok(categories.includes(name));
 });
 check('collapsible dock keeps its accessible toggle outside the hidden panel and doubles the thumb',()=>{
   const toggle=html.indexOf('id="library-collapse-toggle"'),panel=html.indexOf('<aside id="editor-panel"');assert.ok(toggle>0&&toggle<panel);assert.ok(html.includes('aria-controls="editor-panel" aria-expanded="true"'));

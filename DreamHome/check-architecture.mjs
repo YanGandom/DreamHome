@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import * as THREE from './vendor/three.module.js';
 import {SURFACE_GAP} from './placement.js';
+import {checkWallTextures} from './check-wall-textures.mjs';
+import {checkWallMounting} from './check-wall-mounting.mjs';
 
 export function checkArchitecture({system,scene,camera,editor,canvas,controls,$,winEvents,project,tap,findHit,startLibraryDrag,test}){
   editor.close();system.resetLayout();const initial=system.serialize(),a=system.architecture,p=system.placement,wall=system.get('wall-1'),art=system.get('wall-art-3');
@@ -16,7 +18,7 @@ export function checkArchitecture({system,scene,camera,editor,canvas,controls,$,
   });
   test('floor, upper-floor and wall-top placements add clearance once and undo preserves exact heights',()=>{
     const r=system.get('plant-salon');
-    for(const [x,z,y]of [[4,1,1.0175],[-3.5,-3.7,3.9125],[4,4.78,a.bounds(system.get('wall-6')).max.y]]){
+    for(const [x,z,y]of [[4,1,1.02],[-3.5,-3.7,3.9125],[4,4.78,a.bounds(system.get('wall-6')).max.y]]){
       const before=system.serialize();system.beginGesture();assert.equal(system.movePreview(r.id,x,z,y),true);const height=r.root.position.y;assert.ok(Math.abs(height-y-SURFACE_GAP)<1e-6);system.commitGesture();const after=system.serialize();system.undo();assert.deepEqual(system.serialize(),before);system.redo();assert.deepEqual(system.serialize(),after);assert.equal(r.root.position.y,height);
     }reset();
   });
@@ -48,11 +50,19 @@ export function checkArchitecture({system,scene,camera,editor,canvas,controls,$,
   test('wall materials and colors are independent, texture density follows length and history restores them',()=>{
     const other=system.get('wall-2'),before=other.paint[0].map,original=wall.paint[0].map;system.beginGesture();assert.equal(system.materialPreview(wall.id,'brick'),true);const map=wall.paint[0].map,repeat=map.repeat.x;system.lengthPreview(wall.id,6);assert.ok(map.repeat.x<repeat);system.colorPreview(wall.id,'#638b9c');assert.equal(other.paint[0].map,before);assert.equal(wall.paint[0].color.getHexString(),'638b9c');system.cancelGesture();assert.equal(wall.paint[0].map,original);assert.equal(wall.wallMaterial,null);reset();
   });
+  checkWallTextures({system,test,reset});
+  checkWallMounting({system,scene,test,reset});
+  test('library wall decor drops select the interior face; exterior drops cancel without saving a copy',()=>{
+    const cameraBefore=camera.position.clone(),targetBefore=controls.target.clone();
+    const aim=(x)=>{camera.position.set(x,3.3,-2.55);controls.target.set(7.83,3.3,-2.55);controls.update();scene.updateMatrixWorld(true);camera.updateMatrixWorld(true);return project(new THREE.Vector3(7.83,3.3,-2.55))};
+    const before=system.serialize(),point=aim(4.5);startLibraryDrag(art.sourceId,point);winEvents.emit('pointerup',point);const copy=system.get(editor.selectedId);assert.ok(copy);assert.equal(copy.mount.wallId,'wall-4');assert.equal(copy.mount.side,'interior');assert.equal(copy.mount.faceSign,-1);editor.close();system.undo();assert.deepEqual(system.serialize(),before);
+    const outside=aim(11);startLibraryDrag(art.sourceId,outside);winEvents.emit('pointerup',outside);assert.deepEqual(system.serialize(),before);assert.equal(editor.selectedId,null);reset();camera.position.copy(cameraBefore);controls.target.copy(targetBefore);controls.update();camera.updateMatrixWorld(true);
+  });
   test('wall decoration movement changes height and tangent only and survives save/delete/restore',()=>{
     const before=art.root.position.clone();system.beginGesture();assert.equal(system.movePreview(art.id,before.x+.3,before.z,before.y+.25),true);assert.ok(Math.abs(art.root.position.y-before.y-.25)<1e-6);assert.ok(Math.abs(art.root.position.z-before.z)<1e-6);system.commitGesture();const moved=art.root.position.clone(),mount=structuredClone(art.mount);system.remove(art.id);assert.equal(art.root.visible,false);system.restore(art.id);assert.ok(art.root.position.equals(moved));assert.deepEqual(art.mount,mount);const saved=system.serialize();system.load(initial);system.loadSaved(saved);assert.ok(art.root.position.equals(moved));reset();
   });
   test('wall UI offers three scene strips instead of the length slider and preserves furniture controls',()=>{
-    editor.select(wall.id);assert.equal($('object-length'),undefined);assert.equal($('wall-length'),undefined);assert.equal($('object-material').hidden,false);assert.equal($('object-delete').hidden,true);
+    editor.select(wall.id);assert.equal($('object-length'),undefined);assert.equal($('wall-length'),undefined);assert.equal($('object-material').hidden,false);assert.equal($('object-delete').hidden,false);
     const handles=scene.getObjectByName('WallResizeHandles');assert.equal(handles.visible,true);assert.equal(handles.children.length,3);$('object-confirm').click();assert.equal(editor.selectedId,null);assert.equal(handles.visible,false);
     editor.select(wall.id);$('object-material').click();assert.equal($('wall-material-options').children.length,4);$('wall-material-options').children[2].click();assert.equal(wall.wallMaterial,'wood');winEvents.emit('keydown',{key:'Escape'});assert.equal(wall.wallMaterial,null);
     editor.select('salon-sofa');assert.equal(handles.visible,false);assert.equal($('object-material').hidden,true);reset();
@@ -72,5 +82,17 @@ export function checkArchitecture({system,scene,camera,editor,canvas,controls,$,
   });
   test('surfaces are automatic with no selector and wall resizing respects mounted widths',()=>{
     assert.equal($('placement-surface'),undefined);assert.equal(p.activeSurface,'auto');system.beginGesture();system.lengthPreview('wall-2',1);const r=system.get('wall-2');assert.ok(r.root.scale.x*r.localBounds.getSize(new THREE.Vector3()).x>=a.minimumLength(r.id)-1e-6);system.cancelGesture();reset();
+  });
+  test('three wall models drag from the catalog onto a component foundation and return through the same card',()=>{
+    const cameraBefore=camera.position.clone(),targetBefore=controls.target.clone(),build=system.construction;
+    for(const source of ['wall-1','wall-2','wall-5']){
+      reset();const room=build.addRoom({x:14,z:0});assert.ok(room);camera.position.set(18,15,14);controls.target.set(14,1,0);controls.update();camera.updateMatrixWorld(true);scene.updateMatrixWorld(true);editor.setCategory('walls');
+      const before=system.serialize(),point=project(new THREE.Vector3(14,1.02,0));startLibraryDrag(source,point);winEvents.emit('pointerup',point);
+      const copy=system.get(editor.selectedId);assert.ok(copy);assert.equal(copy.sourceId,source);assert.ok(Math.abs(copy.root.position.x-14)<.02);assert.ok(Math.abs(copy.root.position.z)<.02);assert.ok(a.validWall(copy));editor.close();
+      const placed=system.serialize();system.undo();assert.deepEqual(system.serialize(),before);system.redo();assert.deepEqual(system.serialize(),placed);
+      editor.select(copy.id);$('object-delete').click();assert.equal(copy.root.visible,false);assert.equal($('library-list').children.find(c=>c.dataset.itemId===source).dataset.restoreId,copy.id);
+      startLibraryDrag(source,point);winEvents.emit('pointerup',point);assert.equal(editor.selectedId,copy.id);assert.equal(copy.root.visible,true);editor.close();
+    }
+    reset();editor.setCategory('all');camera.position.copy(cameraBefore);controls.target.copy(targetBefore);controls.update();camera.updateMatrixWorld(true);
   });
 }

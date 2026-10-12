@@ -1,10 +1,13 @@
+import {WOOD_FINISHES} from './railing-system.js';
 import * as THREE from './vendor/three.module.js';
+import {pickSceneSurface} from './scene-picking.js';
 import {createGroundSelection} from './ground-selection.js';
 import {createFloorControls} from './floor-controls.js';
 import {createWallHandles} from './wall-handles.js';
 
 const PALETTE=[['森林绿','#437244'],['奶油白','#e7d5af'],['蜂蜜黄','#d9a449'],['酒红','#963d43'],['雾蓝','#638b9c'],['玫瑰粉','#c58b91']];
 const TAP_MS=350,TAP_DISTANCE=7;
+const ROTATION_STEP=30;
 const clamp=(value,min,max)=>Math.min(max,Math.max(min,value));
 export const ROTATION_ARC={width:360,height:118,cx:180,cy:276,radius:250,halfAngle:Math.asin(.6)};
 export function arcPoint(degrees){const a=(clamp(degrees,0,360)/180-1)*ROTATION_ARC.halfAngle;return{x:ROTATION_ARC.cx+ROTATION_ARC.radius*Math.sin(a),y:ROTATION_ARC.cy-ROTATION_ARC.radius*Math.cos(a)}}
@@ -20,7 +23,7 @@ export function createObjectControls({scene,camera,renderer,controls,system,occl
   const $=id=>document.getElementById(id),canvas=renderer.domElement;
   const popup=$('object-ui'),arc=$('rotation-arc'),palette=$('object-palette');
   const arcStart=arcPoint(0);
-  $('arc-ticks').setAttribute('d',[0,90,180,270,360].map(value=>{const p=arcPoint(value),nx=(p.x-ROTATION_ARC.cx)/ROTATION_ARC.radius,ny=(p.y-ROTATION_ARC.cy)/ROTATION_ARC.radius;return `M${p.x+nx*10} ${p.y+ny*10}l${nx*6} ${ny*6}`}).join(' '));
+  $('arc-ticks').setAttribute('d',Array.from({length:360/ROTATION_STEP+1},(_,i)=>i*ROTATION_STEP).map(value=>{const p=arcPoint(value),nx=(p.x-ROTATION_ARC.cx)/ROTATION_ARC.radius,ny=(p.y-ROTATION_ARC.cy)/ROTATION_ARC.radius;return `M${p.x+nx*10} ${p.y+ny*10}l${nx*6} ${ny*6}`}).join(' '));
   const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
   const groundSelection=createGroundSelection(scene);
   const wallHandles=createWallHandles(scene,camera,canvas);
@@ -31,13 +34,13 @@ export function createObjectControls({scene,camera,renderer,controls,system,occl
   const isOperation=()=>['rotate','move','color','material'].includes(mode);
 
   function render(){
-    const r=active();popup.hidden=!enabled||!r;groundSelection.update(enabled?r:null,mode==='move');wallHandles.update(r,enabled&&mode==='move');
+    const r=active();syncPalette(r);popup.hidden=!enabled||!r;groundSelection.update(enabled?r:null,mode==='move');wallHandles.update(r,enabled&&mode==='move');
     if(!r)return;
     popup.dataset.mode=mode;
     $('object-actions').hidden=['color','material'].includes(mode);$('object-rotation').hidden=mode!=='rotate';$('object-palette-panel').hidden=mode!=='color';$('object-finish').hidden=false;
     const wall=r.kind==='wall',special=['rotate','material'].includes(mode);
-    $('object-color').hidden=special;$('object-delete').hidden=special||wall;
-    $('object-material').hidden=!wall||special;$('object-rotate').hidden=false;
+    $('object-color').hidden=special||r.kind==='scatter';$('object-delete').hidden=special;
+    $('object-material').hidden=!wall||special;$('object-rotate').hidden=r.kind==='scatter';
     $('object-material-panel').hidden=mode!=='material';
     if(wall)for(const button of $('wall-material-options').children)button.classList.toggle('active',button.dataset.material===r.wallMaterial);
     for(const action of ['rotate','color']){const button=$('object-'+action);button.classList.toggle('active',mode===action);button.setAttribute('aria-pressed',String(mode===action))}
@@ -49,7 +52,7 @@ export function createObjectControls({scene,camera,renderer,controls,system,occl
   function layoutButtons(){
     const width=popup.offsetWidth||360;
     const wall=active()?.kind==='wall';
-    const buttons=mode==='color'?[...palette.children]:mode==='material'?[...$('wall-material-options').children]:(mode==='rotate'?['rotate']:wall?['rotate','color','material']:['rotate','color','delete']).map(action=>$('object-'+action));
+    const buttons=mode==='color'?[...palette.children]:mode==='material'?[...$('wall-material-options').children]:(active()?.kind==='scatter'?['delete']:mode==='rotate'?['rotate']:wall?['rotate','color','material','delete']:['rotate','color','delete']).map(action=>$('object-'+action));
     buttons.push($('object-confirm'));
     const points=compactButtonArc(width,buttons.map(b=>b.offsetWidth||(b.dataset.color?38:44))),sliderHeight=ROTATION_ARC.height*(width-104)/ROTATION_ARC.width,offset=mode==='rotate'?sliderHeight+4:0;
     buttons.forEach((button,i)=>{button.style.left=points[i].x+'px';button.style.top=points[i].y+offset+'px'});
@@ -79,13 +82,17 @@ export function createObjectControls({scene,camera,renderer,controls,system,occl
   }
   function finishMove(cancel=false){
     if(!moving)return;const state=moving;moving=null;
-    if(cancel){const r=system.get(state.id);r.root.position.copy(state.before);if(state.resize)r.root.scale.copy(state.resize.scale);r.mount=state.beforeMount;r.surface=state.beforeSurface;r.root.updateMatrixWorld(true);system.architecture?.sync()}
+    wallHandles.setActive(null);
+    if(cancel&&state.beforeScatter)system.scatter.load(state.beforeScatter);
+    if(cancel&&!state.beforeScatter){const r=system.get(state.id);r.root.position.copy(state.before);if(state.resize){r.root.scale.copy(state.resize.scale);if(r.railing)system.rebuildRailing(r,state.resize.width)}r.mount=state.beforeMount;r.surface=state.beforeSurface;r.root.updateMatrixWorld(true);system.architecture?.sync()}
     const record=system.get(state.id);if(record)record.root.userData.placementInvalid=false;
     controls.enabled=state.controlsEnabled;canvas.classList.remove('is-dragging','can-resize-height','can-resize-width');render();
     if(canvas.hasPointerCapture(state.pointerId))canvas.releasePointerCapture(state.pointerId);
   }
   function finishArc(cancel=false){
-    if(!arcDrag)return;const state=arcDrag;arcDrag=null;if(cancel)setAngle(state.before);
+    if(!arcDrag)return;const state=arcDrag;arcDrag=null;
+    // Restore the original orientation, including legacy angles between ticks.
+    if(cancel){rotationValue=state.before;system.rotationPreview(selectedId,state.beforeAngle);render()}
     if(arc.hasPointerCapture(state.pointerId))arc.releasePointerCapture(state.pointerId);
   }
   function settle(commit){
@@ -100,24 +107,22 @@ export function createObjectControls({scene,camera,renderer,controls,system,occl
     floorControls?.close();settle(true);selectedId=record.id;mode='move';enabled=true;rotationValue=Math.round(degrees(record));system.beginGesture();onInteract();render();onSelection(selectedId,mode);return record;
   }
   function beginMode(next){
-    const record=active();if(!record||!['rotate','move','color','material'].includes(next)||(next==='material'&&record.kind!=='wall'))return;
+    const record=active();if(!record||record.kind==='scatter'&&next!=='move'||!['rotate','move','color','material'].includes(next)||(next==='material'&&record.kind!=='wall'))return;
     settle(true);mode=next;rotationValue=Math.round(degrees(record));system.beginGesture();onInteract();render();onSelection(selectedId,mode);
   }
-  function setAngle(value){if(mode!=='rotate'||!active())return;const wanted=clamp(Math.round(value),0,360);rotationValue=wanted;if(!system.rotationPreview(selectedId,wanted)){rotationValue=Math.round(degrees(active()));render()}}
+  function setAngle(value){if(mode!=='rotate'||!active())return;const wanted=clamp(Math.round(value/ROTATION_STEP)*ROTATION_STEP,0,360);rotationValue=wanted;if(!system.rotationPreview(selectedId,wanted)){rotationValue=Math.round(degrees(active()));render()}}
   function setEnabled(value){if(!value)close();enabled=value;render()}
   function setRay(event){const rect=canvas.getBoundingClientRect();pointer.set((event.clientX-rect.left)/rect.width*2-1,-(event.clientY-rect.top)/rect.height*2+1);camera.updateMatrixWorld();raycaster.setFromCamera(pointer,camera)}
   function pick(event){
     setRay(event);scene.updateMatrixWorld(true);raycaster.far=Infinity;
-    const hit=raycaster.intersectObjects(system.all().filter(r=>r.root.visible&&system.construction?.editable(r)!==false).map(r=>r.root),true)[0];if(!hit)return null;
-    raycaster.far=Math.max(0,hit.distance-.03);const blocked=raycaster.intersectObjects(occluders,true).some(h=>!h.object.material?.transparent||h.object.material.opacity>.65);raycaster.far=Infinity;return blocked?null:hit;
+    const hit=pickSceneSurface(raycaster,{system,occluders}),record=system.get(hit?.object.userData.furnitureId);
+    return record&&!hit.object.userData.buildId&&system.construction?.editable(record)!==false?hit:null;
   }
   function pickFloor(event){
     if(!system.floorSystem)return null;
     setRay(event);scene.updateMatrixWorld(true);raycaster.far=Infinity;
-    const hit=raycaster.intersectObjects(system.floorSystem.meshes(),false).find(h=>h.face.normal.y>.5&&system.construction?.editable(system.floorSystem.get(h.object.userData.floorId))!==false);if(!hit)return null;
-    raycaster.far=Math.max(0,hit.distance-.008);
-    const blockers=[...occluders,...system.all().filter(r=>r.root.visible).map(r=>r.root)];
-    const blocked=raycaster.intersectObjects(blockers,true).some(h=>!h.object.material?.transparent||h.object.material.opacity>.65);raycaster.far=Infinity;return blocked?null:hit;
+    const hit=pickSceneSurface(raycaster,{system,occluders}),floor=system.floorSystem.get(hit?.object.userData.floorId);
+    return floor&&!floor.dynamic&&hit.face.normal.y>.5&&system.construction?.editable(floor)!==false?hit:null;
   }
   function pickArrow(event,furnitureHit){
     if(mode!=='move'||!active())return null;
@@ -131,7 +136,10 @@ export function createObjectControls({scene,camera,renderer,controls,system,occl
   for(const style of system.architecture?.styles||[]){const button=document.createElement('button');button.type='button';button.className='orbit-button wall-material-option';button.dataset.material=style.id;button.title=style.name;button.setAttribute('aria-label',style.name);button.style.backgroundImage=`url("${style.preview}")`;button.addEventListener('click',()=>{if(mode==='material')system.materialPreview(selectedId,style.id)});$('wall-material-options').append(button)}
   $('object-delete').addEventListener('click',()=>{const id=selectedId;close();if(id)onRemove(id)});
   $('object-confirm').addEventListener('click',()=>close());
-  for(const [name,color]of PALETTE){const button=document.createElement('button');button.type='button';button.className='orbit-button color-option';button.dataset.color=color;button.style.backgroundColor=color;button.setAttribute('aria-label',name);button.setAttribute('aria-pressed','false');button.addEventListener('click',()=>{if(mode==='color'&&active())system.colorPreview(selectedId,color)});palette.append(button)}
+  let paletteKind=null;
+  function syncPalette(record){const kind=record?.woodFinish?'wood':'standard';if(kind===paletteKind)return;paletteKind=kind;palette.replaceChildren();
+    for(const [name,color]of kind==='wood'?WOOD_FINISHES.map(f=>[f.name,f.color]):PALETTE){const button=document.createElement('button');button.type='button';button.className='orbit-button color-option';button.dataset.color=color;button.style.backgroundColor=color;button.setAttribute('aria-label',name);button.setAttribute('aria-pressed','false');button.addEventListener('click',()=>{if(mode==='color'&&active())system.colorPreview(selectedId,color)});palette.append(button)}
+  }
   function arcScale(){return arc.getBoundingClientRect().width/ROTATION_ARC.width||1}
   const arcPosition=event=>{const r=arc.getBoundingClientRect();return{x:(event.clientX-r.left)*ROTATION_ARC.width/r.width,y:(event.clientY-r.top)*ROTATION_ARC.height/r.height}};
   const arcAngle=event=>{const p=arcPosition(event);return angleFromArcPoint(p.x,p.y)};
@@ -142,13 +150,13 @@ export function createObjectControls({scene,camera,renderer,controls,system,occl
     const onThumb=Math.hypot(p.x-thumb.x,p.y-thumb.y)<=Math.max(22,24/scale);
     if(!onThumb&&Math.hypot(p.x-nearest.x,p.y-nearest.y)*scale>22)return;
     event.preventDefault();event.stopImmediatePropagation();arc.focus({preventScroll:true});
-    arcDrag={pointerId:event.pointerId,before:rotationValue,offset:onThumb?rotationValue-rawArcAngle(event):0};arc.setPointerCapture(event.pointerId);
-    if(!onThumb)setAngle(arcAngle(event));
+    arcDrag={pointerId:event.pointerId,before:rotationValue,beforeAngle:degrees(active()),offset:onThumb?rotationValue-rawArcAngle(event):0};arc.setPointerCapture(event.pointerId);
+    if(!onThumb)setAngle(rawArcAngle(event));
   });
   arc.addEventListener('pointermove',event=>{if(arcDrag?.pointerId!==event.pointerId)return;event.preventDefault();setAngle(rawArcAngle(event)+arcDrag.offset)});
   arc.addEventListener('pointerup',event=>{if(arcDrag?.pointerId===event.pointerId)finishArc()});
   arc.addEventListener('pointercancel',()=>finishArc(true));arc.addEventListener('lostpointercapture',()=>finishArc(true));
-  arc.addEventListener('keydown',event=>{const steps={ArrowLeft:-1,ArrowDown:-1,ArrowRight:1,ArrowUp:1,PageDown:-15,PageUp:15};let value;if(event.key in steps)value=rotationValue+steps[event.key]*(event.shiftKey?15:1);else if(event.key==='Home')value=0;else if(event.key==='End')value=360;else return;event.preventDefault();event.stopImmediatePropagation();setAngle(value)});
+  arc.addEventListener('keydown',event=>{const steps={ArrowLeft:-1,ArrowDown:-1,ArrowRight:1,ArrowUp:1,PageDown:-1,PageUp:1};let value;if(event.key in steps)value=rotationValue+steps[event.key]*ROTATION_STEP;else if(event.key==='Home')value=0;else if(event.key==='End')value=360;else return;event.preventDefault();event.stopImmediatePropagation();setAngle(value)});
 
   // Unselected presses reach OrbitControls. A short release selects and enables
   // moving; dragging that selection or its ground arrows then moves the object.
@@ -169,7 +177,7 @@ export function createObjectControls({scene,camera,renderer,controls,system,occl
       setRay(event);const support=system.placement?.pick(raycaster,id)||hit.point;
       const mounted=record.kind==='mounted',plane=mounted?new THREE.Plane().setFromNormalAndCoplanarPoint(system.architecture.normal(system.get(record.mount?.wallId||record.mountWallId)),record.root.position):new THREE.Plane(new THREE.Vector3(0,1,0),-hit.point.y);
       const grab=mounted?raycaster.ray.intersectPlane(plane,new THREE.Vector3())||support:support;
-      moving={id,mounted,beforeSurface:record.surface,beforeMount:record.mount?structuredClone(record.mount):null,axis:arrowHit?.object.userData.moveAxis||null,pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,moved:false,before:record.root.position.clone(),controlsEnabled:controls.enabled,plane,offset:record.root.position.clone().sub(grab)};
+      moving={id,mounted,beforeScatter:record.kind==='scatter'?system.scatter.serialize():null,beforeSurface:record.surface,beforeMount:record.mount?structuredClone(record.mount):null,axis:arrowHit?.object.userData.moveAxis||null,pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,moved:false,before:record.root.position.clone(),controlsEnabled:controls.enabled,plane,offset:record.root.position.clone().sub(grab)};
       controls.enabled=false;canvas.setPointerCapture(event.pointerId);return;
     }
     const floorHit=!hit?pickFloor(event):null;
@@ -180,7 +188,7 @@ export function createObjectControls({scene,camera,renderer,controls,system,occl
       if(event.pointerId!==moving.pointerId)return;event.preventDefault();event.stopImmediatePropagation();
       if(!moving.moved&&Math.hypot(event.clientX-moving.startX,event.clientY-moving.startY)<4)return;
       moving.moved=true;canvas.classList.add('is-dragging');setRay(event);
-      if(moving.resize){system.resizeWallPreview(moving.id,moving.resize.edge,wallHandles.delta(moving.resize,raycaster,event),moving.resize);return}
+      if(moving.resize){(system.get(moving.id)?.railing?system.resizeRailingPreview:system.resizeWallPreview)(moving.id,moving.resize.edge,wallHandles.delta(moving.resize,raycaster,event),moving.resize);return}
       if(moving.mounted){const p=raycaster.ray.intersectPlane(moving.plane,new THREE.Vector3());if(p){p.add(moving.offset);if(moving.axis==='z'){p.x=moving.before.x;p.z=moving.before.z}else if(moving.axis==='x')p.y=moving.before.y;system.movePreview(moving.id,p.x,p.z,p.y)}return}
       const point=system.placement?system.placement.pick(raycaster,moving.id):raycaster.ray.intersectPlane(moving.plane,new THREE.Vector3());
       if(point){const x=moving.axis==='z'?moving.before.x:point.x+moving.offset.x,z=moving.axis==='x'?moving.before.z:point.z+moving.offset.z,y=system.placement?.heightAt(x,z,point.y,moving.id);system.movePreview(moving.id,x,z,y,false,point.wallId)}return;
@@ -194,6 +202,7 @@ export function createObjectControls({scene,camera,renderer,controls,system,occl
     canvas.classList.toggle('can-move',canMove);canvas.classList.toggle('can-select',!canMove&&(!!hit||!!pickFloor(event)));
   },{capture:true});
   canvas.addEventListener('pointerup',event=>{
+    if(event.buildingHandled){press=null;return}
     if(moving?.pointerId===event.pointerId){event.preventDefault();event.stopImmediatePropagation();finishMove();return}
     if(press?.pointerId!==event.pointerId)return;
     const candidate=press;press=null;

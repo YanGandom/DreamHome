@@ -8,6 +8,7 @@ import {createPlacement} from './placement.js';
 import {createFloorSystem} from './floor-system.js';
 import {createArchitectureSystem} from './architecture-system.js';
 import {createBuildingSystem} from './building-system.js';
+import {createScatterSystem} from './scatter-system.js';
 const threeURL=pathToFileURL(new URL('./vendor/three.module.js',import.meta.url).pathname.replace(/^\/([A-Z]:)/,'$1')).href;
 async function addon(file){const src=fs.readFileSync(new URL('./vendor/'+file,import.meta.url),'utf8').replaceAll("from 'three'",`from '${threeURL}'`);return import('data:text/javascript;base64,'+Buffer.from(src).toString('base64'));}
 const {RoundedBoxGeometry}=await addon('RoundedBoxGeometry.js');
@@ -24,7 +25,7 @@ class Renderer{constructor(){this.domElement=element();this.shadowMap={};this.ca
 const THREE={...ThreeCore,WebGLRenderer:Renderer};
 const src=fs.readFileSync(new URL('./scene.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/gm,'');
 const createSceneEditor=options=>({update:noop,close:noop,builder:{close:noop},dragging:false,options});
-new Function('THREE','OrbitControls','RoundedBoxGeometry','mergeGeometries','createFurnitureSystem','createSceneEditor','createPlacement','createFloorSystem','createArchitectureSystem','createSceneMenu','createBuildingSystem',src)(THREE,OrbitControls,RoundedBoxGeometry,mergeGeometries,createFurnitureSystem,createSceneEditor,createPlacement,createFloorSystem,createArchitectureSystem,()=>{},createBuildingSystem);
+new Function('THREE','OrbitControls','RoundedBoxGeometry','mergeGeometries','createFurnitureSystem','createSceneEditor','createPlacement','createFloorSystem','createArchitectureSystem','createSceneMenu','createBuildingSystem','createScatterSystem',src)(THREE,OrbitControls,RoundedBoxGeometry,mergeGeometries,createFurnitureSystem,createSceneEditor,createPlacement,createFloorSystem,createArchitectureSystem,()=>{},createBuildingSystem,createScatterSystem);
 let vertices=0,invalid=0,meshes=0;
 window.__winterScene.scene.traverse(o=>{if(o.isMesh){meshes++;const p=o.geometry.attributes.position;vertices+=p.count;for(const n of p.array)if(!Number.isFinite(n))invalid++}});
 console.log(JSON.stringify({ready:window.__sceneReady,meshes,vertices,invalid,...window.__winterScene.stats},null,2));

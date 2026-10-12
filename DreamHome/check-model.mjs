@@ -10,8 +10,8 @@ const initial=system.serialize(),sofa=system.get('salon-sofa'),other=system.get(
 const cases=[];
 function test(name,fn){fn();cases.push(name)}
 const snapshot=()=>JSON.stringify(system.serialize());
-test('69 assemblies have independent paint materials and finite anchors',()=>{
-  assert.equal(system.all().length,69);
+test('75 assemblies have independent paint materials and finite anchors',()=>{
+  assert.equal(system.all().length,75);
   for(const r of system.all()){assert.ok(r.paint.length,r.id);assert.ok(r.root.children.length);assert.ok(r.initial.toArray().every(Number.isFinite));for(const m of r.paint)assert.notEqual(m,system.templates.get(r.sourceId).root.children.find(o=>o.material.userData.editablePaint)?.material)}
 });
 test('color changes only the selected upholstery, preserving accents and other furniture',()=>{
@@ -36,7 +36,7 @@ test('copies have distinct IDs and colors, and addition is undoable',()=>{
   system.setColor(a.id,'#aabbcc');assert.equal(sofa.color,'#1122aa');assert.equal(b.color,null);system.undo();system.undo();assert.equal(system.get(b.id),null);system.redo();assert.ok(system.get(b.id));system.remove(a.id);
 });
 test('serialization round trip preserves changed, copied and stored items',()=>{
-  const saved=system.serialize(),before=snapshot();system.resetLayout();assert.equal(system.all().length,69);assert.ok(system.load(saved));assert.equal(snapshot(),before);assert.equal(system.load({version:99,items:[]}),false);
+  const saved=system.serialize(),before=snapshot();system.resetLayout();assert.equal(system.all().length,75);assert.ok(system.load(saved));assert.equal(snapshot(),before);assert.equal(system.load({version:99,items:[]}),false);
 });
 test('objects cross original zones, land on real surfaces and retain height in history/storage',()=>{
   const r=system.get('salon-chair-a');system.move(r.id,8.6,7.8);assert.equal(r.root.position.x,8.6);assert.ok(r.root.position.y<.7);const outdoors=snapshot();
@@ -50,7 +50,7 @@ test('walls reject footprints and rotations but other furniture is not a collisi
   system.move(r.id,0,0,1.04);
   const floor=system.placement.heightAt(5,2,1.1,r.id),balcony=system.placement.heightAt(-3.5,-3.7,4,r.id),stair=system.placement.heightAt(-1.2,.05,3,r.id);
   assert.ok(floor>1&&floor<1.05);assert.ok(balcony>3.9&&balcony<3.93);assert.ok(stair>1.5&&stair<3);
-  system.move(sofa.id,0,3.7,1.04);const before=sofa.root.rotation.y;assert.equal(system.rotationPreview(sofa.id,90),false);assert.equal(sofa.root.rotation.y,before);
+  system.move(sofa.id,4,3.7,1.04);const before=sofa.root.rotation.y;assert.equal(system.rotationPreview(sofa.id,90),false);assert.equal(sofa.root.rotation.y,before);
 });
 test('cancelled catalog previews leave no visible or hidden scene copies',()=>{
   const before=snapshot(),roots=scene.children.length;
@@ -65,11 +65,11 @@ test('night mode reaches editable lamps and newly added lamp copies',()=>{
 });
 system.resetLayout();assert.deepEqual(system.serialize(),initial);
 const outdoor=system.all().filter(r=>r.id.startsWith('garden-'));
-test('all 12 outdoor assemblies include their snow and decorations, with independent editing',()=>{
+test('all 12 outdoor assemblies keep their decorations and independent editing without old snow caps',()=>{
   assert.equal(outdoor.length,12);
   const seenCategories=new Set();
   for(const r of outdoor){
-    seenCategories.add(r.category);assert.ok(system.templates.has(r.id));assert.ok(r.root.children.some(o=>o.isMesh&&o.material.userData.baseColor==='#f5fbff'),r.id+' snow');
+    seenCategories.add(r.category);assert.ok(system.templates.has(r.id));assert.equal(r.root.children.some(o=>o.isMesh&&o.material.userData.baseColor==='#f5fbff'),false,r.id+' has no original snow');
     const accents=r.root.children.filter(o=>o.isMesh&&!o.material.userData.editablePaint).map(o=>[o,o.material.color.getHexString(),o.position.toArray()]);
     system.beginGesture();assert.equal(system.movePreview(r.id,10,8,.14),true);assert.equal(system.rotationPreview(r.id,80),true);system.colorPreview(r.id,'#638b9c');
     assert.ok(r.paint.every(m=>m.color.getHexString()==='638b9c'));
@@ -95,7 +95,7 @@ test('legacy saved layouts gain new outdoor originals without losing edits, copi
   const legacy={version:1,items:structuredClone(initial.items.filter(item=>!item.id.startsWith('garden-')||item.id==='garden-bench'))};
   const edited=legacy.items.find(item=>item.id==='salon-sofa');edited.position=[3,1.1,2];edited.rotation=.7;edited.color='#963d43';edited.visible=false;
   legacy.items.push({...structuredClone(edited),id:'copy-legacy-check',visible:true});
-  assert.equal(legacy.items.length,59);assert.ok(system.loadSaved(legacy));assert.equal(system.all().length,70);
+  assert.equal(legacy.items.length,65);assert.ok(system.loadSaved(legacy));assert.equal(system.all().length,76);
   const loaded=system.serialize();assert.deepEqual(loaded.items.find(item=>item.id===edited.id),edited);assert.ok(system.get('copy-legacy-check'));
   for(const r of outdoor){assert.ok(system.get(r.id));assert.equal(system.get(r.id).root.visible,true)}
   assert.ok(system.loadSaved(loaded));assert.deepEqual(system.serialize(),loaded);
