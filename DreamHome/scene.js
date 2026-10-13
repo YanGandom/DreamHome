@@ -1,3 +1,5 @@
+import {createPigeons} from './pigeons.js';
+import {createGoldenDog} from './golden-dog.js';
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { RoundedBoxGeometry } from './vendor/RoundedBoxGeometry.js';
@@ -314,7 +316,22 @@ function stopCameraDrift(){
   // Flush OrbitControls inertia before starting a precise camera transition.
   const damping=controls.enableDamping;controls.enableDamping=false;controls.update();controls.enableDamping=damping;
 }
-function goView(name,instant=false){const v=views[name];stopCameraDrift();syncCameraView(name);const p=new THREE.Vector3(...v.p),t=new THREE.Vector3(...v.t);if(instant){tween=null;camera.position.copy(p);controls.target.copy(t);controls.update()}else tween={start:performance.now(),from:camera.position.clone(),fromT:controls.target.clone(),to:p,toT:t};}
+function goView(name,instant=false){
+  const from=camera.position.clone(),fromT=controls.target.clone();
+  stopCameraDrift();camera.position.copy(from);controls.target.copy(fromT);syncCameraView(name);
+  let p=new THREE.Vector3(...views[name].p),t=new THREE.Vector3(...views[name].t),orbit=null;
+  if(name==='top'){
+    const spherical=new THREE.Spherical().setFromVector3(from.clone().sub(fromT));
+    // Keep heading, focus and distance. A tiny polar offset avoids the undefined
+    // azimuth at the exact vertical pole in lookAt/OrbitControls.
+    orbit={radius:spherical.radius,theta:spherical.theta,phi:spherical.phi};t=fromT.clone();
+    p=t.clone().add(new THREE.Vector3().setFromSphericalCoords(orbit.radius,.0001,orbit.theta));
+  }
+  const startOrbit=new THREE.Spherical().setFromVector3(from.clone().sub(fromT)),endOrbit=new THREE.Spherical().setFromVector3(p.clone().sub(t));
+  orbit={radius:startOrbit.radius,phi:startOrbit.phi,theta:startOrbit.theta,toRadius:endOrbit.radius,toPhi:endOrbit.phi,toTheta:startOrbit.theta+Math.atan2(Math.sin(endOrbit.theta-startOrbit.theta),Math.cos(endOrbit.theta-startOrbit.theta))};
+  if(instant){tween=null;camera.position.copy(p);controls.target.copy(t);controls.update()}
+  else{controls.minPolarAngle=0;tween={start:performance.now(),from,fromT,to:p,toT:t,orbit}}
+}
 goView('overview',true);
 document.querySelector('#rotate').onclick=()=>{controls.autoRotate=!controls.autoRotate;toggle('rotate',controls.autoRotate)};
 document.querySelector('#snow').onclick=()=>{snow.visible=!snow.visible;toggle('snow',snow.visible)};
@@ -336,9 +353,11 @@ furnitureSystem.setConstruction(buildingSystem);
 furnitureSystem.setPlacement(createPlacement({surfaces:()=>world.children,architecture:architectureSystem,floorSystem,getFurniture:()=>furnitureSystem.all()}));
 furnitureSystem.setScatter(createScatterSystem({scene,system:furnitureSystem}));
 const editor=createSceneEditor({scene,camera,renderer,controls,furnitureSystem,occluders:world.children,onResize:resizeScene,toast,onInteract:()=>{tween=null;controls.autoRotate=false;toggle('rotate',false)},onBuildingView:(view,room)=>{stopCameraDrift();syncCameraView('overview');const target=room?new THREE.Vector3(room.x,buildingSystem.height(room)+1,room.z):new THREE.Vector3(0,view==='2'?4:2,0),distance=room?Math.max(room.width,room.depth)*1.25:18;const to=view==='roof'?target.clone().add(new THREE.Vector3(.1,distance*1.5,1)):target.clone().add(new THREE.Vector3(distance,distance*.9,distance*1.2));tween={start:performance.now(),from:camera.position.clone(),fromT:controls.target.clone(),to,toT:target}}});
-document.getElementById('camera-view-toggle').onclick=()=>{if(editor.dragging)return;editor.close();editor.builder?.close();const next=cameraView==='top'?'overview':'top';if(next==='overview')buildingSystem.setView('outside');goView(next)};
+document.getElementById('camera-view-toggle').onclick=()=>{if(editor.dragging)return;if(editor.selectedId||editor.selectedFloorId)editor.close();if(editor.builder?.active)editor.builder.close();const next=cameraView==='top'?'overview':'top';if(next==='overview'&&buildingSystem.view!=='outside')buildingSystem.setView('outside');goView(next)};
 resizeScene();
-let last=performance.now();function animate(now){requestAnimationFrame(animate);const dt=Math.min(.05,(now-last)/1000);last=now;const t=now*.001;buildingSystem.animate(t);if(tween){const a=Math.min(1,(now-tween.start)/1000),s=a*a*(3-2*a);camera.position.lerpVectors(tween.from,tween.to,s);controls.target.lerpVectors(tween.fromT,tween.toT,s);if(a===1)tween=null}for(const f of flames){f.mesh.scale.y=f.base*(.85+.15*Math.sin(t*9+f.phase));f.mesh.position.x+=Math.sin(t*6+f.phase)*dt*.014}firelight.intensity=(night?41:28)+Math.sin(t*10)*2;if(snow.visible){const p=sg.attributes.position;for(let i=0;i<snowCount;i++){p.array[i*3+1]-=snowVel[i]*dt;p.array[i*3]+=Math.sin(t*.35+i)*dt*.09;if(p.array[i*3]>snowBox.width/2)p.array[i*3]-=snowBox.width;if(p.array[i*3]<-snowBox.width/2)p.array[i*3]+=snowBox.width;if(p.array[i*3+1]<snowBox.bottom)p.array[i*3+1]=snowBox.top}p.needsUpdate=true}if(!editor.dragging&&controls.enabled)controls.update();editor.update();renderer.render(scene,camera)}
+const goldenDog=createGoldenDog({scene,system:furnitureSystem});
+const pigeons=createPigeons({scene,system:furnitureSystem,camera,canvas:renderer.domElement,controls,blocked:()=>editor.dragging||!!window.__winterScene?.game?.busy});
+let last=performance.now();function animate(now){requestAnimationFrame(animate);const dt=Math.min(.05,(now-last)/1000);last=now;const t=now*.001;buildingSystem.animate(t);pigeons.update(dt);goldenDog.update(dt,editor.dragging||!!window.__winterScene?.game?.busy);if(tween){const a=Math.min(1,(now-tween.start)/1000),s=a*a*(3-2*a);controls.target.lerpVectors(tween.fromT,tween.toT,s);if(tween.orbit){const o=tween.orbit;camera.position.copy(controls.target).add(new THREE.Vector3().setFromSphericalCoords(THREE.MathUtils.lerp(o.radius,o.toRadius,s),THREE.MathUtils.lerp(o.phi,o.toPhi,s),THREE.MathUtils.lerp(o.theta,o.toTheta,s)))}else camera.position.lerpVectors(tween.from,tween.to,s);if(a===1){tween=null;controls.minPolarAngle=cameraView==='top'?0:.08}}for(const f of flames){f.mesh.scale.y=f.base*(.85+.15*Math.sin(t*9+f.phase));f.mesh.position.x+=Math.sin(t*6+f.phase)*dt*.014}firelight.intensity=(night?41:28)+Math.sin(t*10)*2;if(snow.visible){const p=sg.attributes.position;for(let i=0;i<snowCount;i++){p.array[i*3+1]-=snowVel[i]*dt;p.array[i*3]+=Math.sin(t*.35+i)*dt*.09;if(p.array[i*3]>snowBox.width/2)p.array[i*3]-=snowBox.width;if(p.array[i*3]<-snowBox.width/2)p.array[i*3]+=snowBox.width;if(p.array[i*3+1]<snowBox.bottom)p.array[i*3+1]=snowBox.top}p.needsUpdate=true}if(!editor.dragging&&controls.enabled)controls.update();editor.update();renderer.render(scene,camera)}
 requestAnimationFrame(animate);document.querySelector('#loading').classList.add('done');
 renderer.render(scene,camera);
-window.__sceneReady=true;window.__winterScene={scene,camera,controls,renderer,views,goView,stopCameraDrift,resizeScene,editor,catalogAudit,furnitureSystem,floorSystem,architectureSystem,snow,stats:{sourceMeshes:staticMeshes.length,batches:buckets.size,furniture:furnitureSystem.all().length,triangles:renderer.info.render.triangles},setNight:()=>document.querySelector('#night').click()};
+window.__sceneReady=true;window.__winterScene={pigeons,goldenDog,scene,camera,controls,renderer,views,goView,stopCameraDrift,resizeScene,editor,catalogAudit,furnitureSystem,floorSystem,architectureSystem,snow,stats:{sourceMeshes:staticMeshes.length,batches:buckets.size,furniture:furnitureSystem.all().length,triangles:renderer.info.render.triangles},setNight:()=>document.querySelector('#night').click()};
