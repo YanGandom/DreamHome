@@ -94,6 +94,11 @@ export function startGame(app,{doc=document,storage=localStorageOrFallback(),req
   $('task-toggle').addEventListener('click',()=>taskPanel($('task-panel').hidden));$('task-close').addEventListener('click',()=>{taskPanel(false);$('task-toggle').focus()});
   doc.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('task-panel').hidden){event.preventDefault();event.stopImmediatePropagation();taskPanel(false);$('task-toggle').focus()}},{capture:true});
   system.subscribe(type=>{const current=system.serialize();if(!sceneEditing&&state==='playing'&&type==='action')progression.record(previous,current,id=>system.templates.get(id),mode==='level'?'level-'+levelId:'custom');if(['commit','restore','action'].includes(type))previous=current;if(state==='playing'&&['commit','restore'].includes(type))tasks()});
-  stop();showEntry();highView();$('task-toggle').hidden=true;
+  stop();
+  // The entry miniature must reflect the configured first-level design too.
+  // Loading a preview does not write over any player save or designer draft.
+  const entryLayout=levelConfig.get(1).initialLayout;
+  if(entryLayout){system.load(structuredClone(entryLayout));system.clearHistory();previous=system.serialize()}
+  showEntry();highView();$('task-toggle').hidden=true;
   const api={choose,home,reset,resetAll,editScene,saveScene,get sceneEditing(){return sceneEditing},tasks,progression,levelConfig,get levelId(){return levelId},get orbiting(){return orbiting},get mode(){return mode},get state(){return state},get busy(){return busy}};app.game=api;api.settings=installSettings(app,{doc,storage,progression,levelConfig,onConfig:id=>{invalidated.add(id)}});return api;
 }
