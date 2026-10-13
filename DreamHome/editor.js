@@ -1,4 +1,5 @@
 import {decorateLock} from './progression.js';
+import {createLibraryCarry} from './library-carry.js';
 import {createObjectControls} from './object-controls.js';
 import * as THREE from './vendor/three.module.js';
 import {createGroundSelection} from './ground-selection.js';
@@ -14,6 +15,7 @@ export function createSceneEditor({scene,camera,renderer,controls,furnitureSyste
   let selectedId=null,selectedFloorId=null,editing=true,category='all',operation=null,libraryDrag=null,suppressClick=false,builder=null;
   let libraryCollapsed=false,scatterControls=null,storageKey=STORAGE_KEY;
   const thumbnails=thumbnailFactory(renderer),dragMarker=createGroundSelection(scene,'LibraryPlacement'),raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();
+  const carry=createLibraryCarry();
 
   function save(){try{localStorage.setItem(storageKey,JSON.stringify(system.serialize()));ui.status.textContent='已自动保存 · 本机'}catch{ui.status.textContent='无法自动保存 · 请勿刷新'}}
   function renderInspector(){
@@ -58,15 +60,18 @@ export function createSceneEditor({scene,camera,renderer,controls,furnitureSyste
       if(kind==='build'){builder.bindCard(card,r);ui.list.append(card);continue}
       card.addEventListener('pointerdown',event=>{
         if(event.button!==0||event.isPrimary===false||libraryDrag)return;
-        suppressClick=false;libraryDrag={source:r.id,kind,pointerId:event.pointerId,x:event.clientX,y:event.clientY,moved:false,scrolling:false,scrollLeft:ui.list.scrollLeft||0,record:null,valid:false,controlsEnabled:controls.enabled};
-        ui.list.setPointerCapture(event.pointerId);
+        suppressClick=false;libraryDrag={source:r.id,kind,card,pointerId:event.pointerId,x:event.clientX,y:event.clientY,moved:false,scrolling:false,scrollLeft:ui.list.scrollLeft||0,record:null,valid:false,controlsEnabled:controls.enabled};
+        // Keep the subsequent browser click targeted at this card, not the dock.
+        card.setPointerCapture(event.pointerId);
       });
       card.addEventListener('dragstart',event=>event.preventDefault());
-      card.addEventListener('click',()=>{
+      card.addEventListener('click',event=>{
         if(suppressClick){suppressClick=false;return}
         builder?.close();interaction.close();
-        if(kind==='catalog'){const custom=system.construction?.state.customGround,base=system.construction?.all()[0];const near=custom&&base?new THREE.Vector3(base.x,system.construction.height(base),base.z):undefined;const copy=system.add(r.sourceId,near);if(copy){select(copy.id);toast('已添加'+r.name+'，拖动摆放后点击绿色对勾')}else toast('已达到 200 件物件上限，请先删除一些物件')}
-        else if(kind==='removed'){if(!system.canAdd()){toast('场景最多摆放 200 件物件，请先删除一些物件');return}system.restore(r.id);select(r.id);toast(r.name+'已恢复到收纳前的位置')}
+        finishLibraryDrag(false);
+        if(!system.canAdd()){toast('场景最多摆放 200 件物件，请先删除一些物件');return}
+        libraryDrag={source:r.id,kind,card,pointerId:null,armed:true,clickPickup:true,x:event.clientX||0,y:event.clientY||0,moved:true,scrolling:false,record:null,valid:false,controlsEnabled:controls.enabled};
+        controls.enabled=false;onInteract();document.body.classList.add('library-dragging');carry.start(card,event);
       });ui.list.append(card);
     }
   }
@@ -78,14 +83,15 @@ export function createSceneEditor({scene,camera,renderer,controls,furnitureSyste
   builder?.setEnabled(editing);
   system.placement?.setSurface('auto');
   function dragOver(event){
-    const state=libraryDrag;if(!state||event.pointerId!==state.pointerId)return;
+    const state=libraryDrag;if(!state||!state.armed&&event.pointerId!==state.pointerId)return;
     if(!state.moved&&Math.hypot(event.clientX-state.x,event.clientY-state.y)<7)return;
     event.preventDefault();event.stopImmediatePropagation();
     const stageRect=renderer.domElement.getBoundingClientRect(),inStage=event.clientY<stageRect.top+stageRect.height&&event.clientX<stageRect.left+stageRect.width;
     if(state.scrolling||!state.moved&&!inStage&&Math.abs(event.clientX-state.x)>Math.abs(event.clientY-state.y)*1.3){state.moved=true;state.scrolling=true;ui.list.scrollLeft=state.scrollLeft-(event.clientX-state.x);return}
-    if(!state.moved){state.moved=true;builder?.close();interaction.close();if(!editing)setEditing(true);onInteract();controls.enabled=false;document.body.classList.add('library-dragging')}
+    if(!state.moved){state.moved=true;builder?.close();interaction.close();if(!editing)setEditing(true);onInteract();controls.enabled=false;document.body.classList.add('library-dragging');carry.start(state.card,event)}
     const rect=renderer.domElement.getBoundingClientRect(),inside=event.clientX>=rect.left&&event.clientX<rect.left+rect.width&&event.clientY>=rect.top&&event.clientY<rect.top+rect.height;
     state.valid=false;state.inside=inside;
+    carry.move(event,!inside);
     if(!inside){if(state.record)state.record.root.visible=false;dragMarker.update(null,false);return}
     if(!state.record){state.record=system.beginPlacement(state.source,state.kind);if(!state.record){toast('已达到 200 件物件上限');finishLibraryDrag(false);return}}
     state.record.root.visible=true;scene.updateMatrixWorld(true);camera.updateMatrixWorld();
@@ -97,10 +103,12 @@ export function createSceneEditor({scene,camera,renderer,controls,furnitureSyste
   }
   function finishLibraryDrag(commit){
     const state=libraryDrag;if(!state)return;libraryDrag=null;
-    if(ui.list.hasPointerCapture(state.pointerId))ui.list.releasePointerCapture(state.pointerId);
+    carry.hide();
+    if(state.pointerId!==null&&state.card?.hasPointerCapture(state.pointerId))state.card.releasePointerCapture(state.pointerId);
+    if(state.pointerId!==null&&ui.list.hasPointerCapture(state.pointerId))ui.list.releasePointerCapture(state.pointerId);
     if(!state.moved)return;
     if(state.scrolling){suppressClick=true;return}
-    suppressClick=true;controls.enabled=state.controlsEnabled;document.body.classList.remove('library-dragging','library-drop-invalid');dragMarker.update(null,false);
+    suppressClick=!state.clickPickup;controls.enabled=state.controlsEnabled;document.body.classList.remove('library-dragging','library-drop-invalid');dragMarker.update(null,false);
     if(state.record){
       if(commit&&state.valid){state.record.root.userData.placementInvalid=false;state.record.root.visible=true;system.commitGesture();select(state.record.id)}
       else{system.cancelPlacement(state.record.id,state.kind==='catalog');if(commit&&state.inside)toast(state.record.kind==='mounted'?'请拖到房间内侧有足够空间的墙面':'墙体位置不能摆放，请拖到其它位置')}
@@ -108,6 +116,7 @@ export function createSceneEditor({scene,camera,renderer,controls,furnitureSyste
     renderLibrary();renderInspector();
   }
   window.addEventListener('pointermove',dragOver,{capture:true});
+  window.addEventListener('pointerdown',event=>{if(!libraryDrag?.armed||event.button!==0||event.isPrimary===false)return;const rect=renderer.domElement.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>=rect.left+rect.width||event.clientY<rect.top||event.clientY>=rect.top+rect.height){finishLibraryDrag(false);return}libraryDrag.armed=false;libraryDrag.pointerId=event.pointerId;event.preventDefault();event.stopImmediatePropagation();ui.list.setPointerCapture(event.pointerId);dragOver(event)},{capture:true});
   window.addEventListener('pointerup',event=>{if(libraryDrag?.pointerId!==event.pointerId)return;if(libraryDrag.moved){dragOver(event);event.preventDefault();event.stopImmediatePropagation()}finishLibraryDrag(true)},{capture:true});
   window.addEventListener('pointercancel',event=>{if(event.pointerId===libraryDrag?.pointerId)finishLibraryDrag(false)},{capture:true});
   ui.list.addEventListener('lostpointercapture',()=>finishLibraryDrag(false));

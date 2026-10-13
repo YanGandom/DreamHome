@@ -72,6 +72,13 @@ html:not([lang=zh-CN]) .entry-logo h1{letter-spacing:1px}html:not([lang=zh-CN]) 
 .game-tool-rail{position:fixed;left:max(18px,env(safe-area-inset-left));top:110px;display:flex;flex-direction:column;gap:12px;z-index:7}
 html body .game-tool-rail .camera-view-toggle{position:relative;inset:auto;transform:none;margin:0;padding:12px;width:56px;height:56px;min-width:56px;border-radius:50%;display:grid;place-items:center;box-sizing:border-box}
 html body .game-tool-rail button[hidden]{display:none}
+/* Animate the whole rail once, after the camera settles and mode visibility
+   is resolved. Hidden task buttons leave no gap in custom mode. */
+body .game-tool-rail{opacity:0;visibility:hidden;pointer-events:none}
+body.game-playing.tool-rail-ready .game-tool-rail{visibility:visible;pointer-events:auto;animation:tool-rail-in .6s cubic-bezier(.22,1,.36,1) both}
+body.game-playing .game-tool-rail .camera-view-toggle{animation:none}
+@keyframes tool-rail-in{from{opacity:0;translate:-20px 0}to{opacity:1;translate:0 0}}
+@media(prefers-reduced-motion:reduce){body.game-playing.tool-rail-ready .game-tool-rail{opacity:1;translate:0 0;animation:none}}
 .game-tool-rail svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .game-tool-rail .task-ring{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg);pointer-events:none;stroke-width:3}
 .task-ring-track{stroke:#d6e3d7}#task-progress-ring{stroke:#39835b;transition:stroke-dashoffset .3s}

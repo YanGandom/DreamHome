@@ -22,7 +22,7 @@ export function startGame(app,{doc=document,storage=localStorageOrFallback(),req
   const levelKey=level=>'dreamhome-level-'+level.id+'-v1'+(level.configured||level.sceneConfigured?'-'+level.revision:'');
   const layoutKey=()=>mode==='level'?levelKey(activeLevel):MODE_KEYS.custom;
   const chrome=['achievement-toggle','editor-panel','library-collapse-toggle','camera-view-toggle','task-toggle','scene-menu-toggle','undo-edit','redo-edit','edit-mode'];
-  function setChrome(enabled){for(const id of chrome)$(id).inert=!enabled;editor.setEditing(enabled);controls.enabled=enabled}
+  function setChrome(enabled){for(const id of chrome)$(id).inert=!enabled;editor.setEditing(enabled);controls.enabled=enabled;body.classList.toggle('tool-rail-ready',enabled)}
   function taskPanel(open){$('task-panel').hidden=!open;$('task-toggle').setAttribute('aria-expanded',String(open));if(open)$('task-close').focus()}
   function tasks(){if(mode!=='level'||sceneEditing)return;const level=activeLevel,done=evaluateLevel(level,levelBaseline,system.serialize(),id=>system.templates.get(id)),count=done.filter(Boolean).length;
     ['task-floor','task-sofa','task-window'].forEach((id,i)=>{$(id).classList.toggle('complete',done[i]);$(id).textContent=(done[i]?'✓ ':'○ ')+level.labels[i];$(id).setAttribute('aria-label',(done[i]?'已完成：':'未完成：')+level.labels[i])});
@@ -65,7 +65,7 @@ export function startGame(app,{doc=document,storage=localStorageOrFallback(),req
       editor.setCategory('all');editor.setLibraryCollapsed(false);editor.setEditing(false);controls.enabled=false;
       body.classList.remove('game-intro');body.classList.add('game-playing');app.resizeScene();
       const view=app.views.overview;await tween(new THREE.Vector3(...view.p),new THREE.Vector3(...view.t),switching?850:1400);
-      $('game-entry').hidden=true;$('game-entry').classList.remove('departing');state='playing';body.dataset.gameState='playing';setChrome(true);$('task-toggle').hidden=sceneEditing||mode!=='level';tasks();if(!sceneEditing)write(layoutKey(),system.serialize());$('camera-view-toggle').focus();return true;
+      $('game-entry').hidden=true;$('game-entry').classList.remove('departing');state='playing';body.dataset.gameState='playing';$('task-toggle').hidden=sceneEditing||mode!=='level';setChrome(true);tasks();if(!sceneEditing)write(layoutKey(),system.serialize());$('camera-view-toggle').focus();return true;
     }finally{busy=false;$('mode-level').disabled=$('mode-custom').disabled=$('mode-back').disabled=false}
   }
   function reset(){if(busy||state!=='playing'||editor.dragging||!startingLayout)return false;state='resetting';editor.close(false);editor.builder.close(false);editor.setEditing(false);system.load(structuredClone(startingLayout));system.clearHistory();previous=system.serialize();state='playing';editor.setEditing(true);controls.enabled=true;app.goView('overview',true);tasks();write(sceneEditing?'dreamhome-scene-draft-v1':layoutKey(),system.serialize());$('reset-confirm').hidden=true;$('edit-mode').focus();return true}

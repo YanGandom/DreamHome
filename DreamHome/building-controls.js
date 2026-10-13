@@ -1,4 +1,5 @@
 import {decorateLock} from './progression.js';
+import {createLibraryCarry} from './library-carry.js';
 import {createOutdoorPlot} from './outdoor-plots.js';
 import * as THREE from './vendor/three.module.js';
 import {pickSceneSurface} from './scene-picking.js';
@@ -8,6 +9,8 @@ import {createRoomFoundation,GROUND_TOP,ORIGINAL_FOUNDATION_COLOR} from './found
 
 export function createBuildingControls({scene,camera,renderer,controls,system,occluders=[],toast,onInteract,onSelect=()=>{},onLooseSelect=()=>{},onView=()=>{}}){
   const model=system.construction;if(!model)return null;
+  const carry=createLibraryCarry();let pendingControls=null;
+  function endCarry(){carry.hide();if(pendingControls!==null){controls.enabled=pendingControls;pendingControls=null}}
   const canvas=renderer.domElement,$=id=>document.getElementById(id),popup=$('build-ui'),options=$('build-options'),deleteDialog=$('foundation-delete-dialog');
   const ray=new THREE.Raycaster(),pointer=new THREE.Vector2(),handles=createWallHandles(scene,camera,canvas),ground=new THREE.Group(),bars=[];
   handles.root.name='BuildingWallHandles';ground.name='FoundationHandles';scene.add(ground);ground.visible=false;
@@ -46,7 +49,7 @@ export function createBuildingControls({scene,camera,renderer,controls,system,oc
   function point(event,y=1.02){setRay(event);return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-y),new THREE.Vector3())}
   function message(){if(performance.now()-lastTip>1600){toast(model.lastError||'请在有效的建筑表面上放置');lastTip=performance.now()}}
   function closeDelete(){if(!deleteId)return;deleteId=null;if(deleteDialog.open)deleteDialog.close();deleteDialog.hidden=true;controls.enabled=deleteControlsEnabled}
-  function close(commit=true,settle=true){closeDelete();const wasActive=!!selected||!!pending;if(drag){controls.enabled=drag.controlsEnabled;drag=null}highlightGround(null);pending=null;library=null;press=null;selected=null;previewRoot.visible=false;popup.hidden=true;options.hidden=true;handles.update(null,false);ground.visible=false;if(settle&&wasActive&&system.gesturing){if(commit)system.commitGesture();else system.cancelGesture()}}
+  function close(commit=true,settle=true){endCarry();closeDelete();const wasActive=!!selected||!!pending;if(drag){controls.enabled=drag.controlsEnabled;drag=null}highlightGround(null);pending=null;library=null;press=null;selected=null;previewRoot.visible=false;popup.hidden=true;options.hidden=true;handles.update(null,false);ground.visible=false;if(settle&&wasActive&&system.gesturing){if(commit)system.commitGesture();else system.cancelGesture()}}
   function select(id,existingGesture=false){if(!model.getModel(id))return false;if(!existingGesture){close();onSelect();system.beginGesture()}selected=id;onInteract();optionMode=null;options.hidden=true;update();return true}
   function active(){return model.find(selected)||model.room(selected?.replace(/-roof$/,''))?.roof}
   function update(){
@@ -66,7 +69,7 @@ export function createBuildingControls({scene,camera,renderer,controls,system,oc
     if(!options.hidden)for(const button of options.children){const chosen=button.dataset.color?button.dataset.color===item?.color:button.dataset.style===(item?.floorStyle||item?.style);button.classList.toggle('active',chosen);if(button.dataset.color||button.dataset.style)button.setAttribute('aria-pressed',String(chosen));decorateLock(button,system.progression,button.dataset.rewardOption,true)}
   }
   function startTool(tool){const libraryState=library;close();library=libraryState;onSelect();onInteract();system.beginGesture();pending=tool;previewRoot.clear();previewRoot.scale.set(1,1,1);const sample=catalog.find(r=>r.tool===tool)?.root.clone(true);if(sample){sample.traverse(o=>{if(o.isMesh)o.material=previewMaterial});if(tool==='room'&&model.view==='2')sample.getObjectByName('PreviewOutdoorGround').visible=false;previewRoot.add(sample)}toast({paving:'摆放室外铺装，拖动四边调整长宽，材质按钮更换地砖',garden:'摆放带砖边的花草地，材质按钮选择四种样式',room:'在空地上放置 6 × 6 米地基（最大 20 × 20 米）',upper:'自由摆放二层地板，可更换花纹和调整尺寸',ground:'摆放 6 × 6 米地面，可与周围地面融合',wall:'自由摆放墙壁，放到地基上自动吸附四边，每段最高 6 米',door:'点击新建墙面添加真实门洞',flat:'点击房间添加平顶',gable:'点击房间添加双坡顶',chimney:'点击屋顶摆放烟囱'}[tool])}
-  function preview(event){if(!pending)return;const rect=canvas.getBoundingClientRect();previewRoot.visible=event.clientY>=rect.top&&event.clientY<rect.top+rect.height&&event.clientX>=rect.left&&event.clientX<rect.left+rect.width;if(!previewRoot.visible)return;if(pending==='upper'){const p=upperPoint(event);if(!p){previewRoot.visible=false;return}const draft=model.upperDraft(p);previewRoot.position.set(draft.x,model.height(draft),draft.z);previewRoot.scale.set(draft.width/6,1,draft.depth/2);previewMaterial.color.set(model.canPlaceRoom(draft)?'#85c578':'#de8070');return}const picked=hit(event),p=['ground','paving','garden'].includes(pending)?point(event,GROUND_TOP+.01):pending==='room'?point(event,model.view==='2'?1.02+model.state.height+.2:1.02):picked?.point||point(event,GROUND_TOP+.01);if(!p){previewRoot.visible=false;return}previewRoot.position.copy(p);previewMaterial.color.set(['room','ground'].includes(pending)||picked||['wall','flat','gable','chimney','door'].includes(pending)?'#85c578':'#de8070');if(pending==='room'){const r=model.snapRoom({id:'preview',x:p.x,z:p.z,width:6,depth:6,level:model.view==='2'?2:1});previewRoot.position.x=r.x;previewRoot.position.z=r.z;previewMaterial.color.set(model.canPlaceRoom(r)?'#85c578':'#de8070')}else if(pending==='ground'){const r={x:snap(p.x),z:snap(p.z),width:6,depth:6};previewRoot.position.x=r.x;previewRoot.position.z=r.z;previewMaterial.color.set(model.validGround(r)?'#85c578':'#de8070')}}
+  function preview(event){if(!pending)return;const rect=canvas.getBoundingClientRect();previewRoot.visible=event.clientY>=rect.top&&event.clientY<rect.top+rect.height&&event.clientX>=rect.left&&event.clientX<rect.left+rect.width;carry.move(event,!previewRoot.visible);carry.move(event,!previewRoot.visible);if(!previewRoot.visible)return;if(pending==='upper'){const p=upperPoint(event);if(!p){previewRoot.visible=false;return}const draft=model.upperDraft(p);previewRoot.position.set(draft.x,model.height(draft),draft.z);previewRoot.scale.set(draft.width/6,1,draft.depth/2);previewMaterial.color.set(model.canPlaceRoom(draft)?'#85c578':'#de8070');return}const picked=hit(event),p=['ground','paving','garden'].includes(pending)?point(event,GROUND_TOP+.01):pending==='room'?point(event,model.view==='2'?1.02+model.state.height+.2:1.02):picked?.point||point(event,GROUND_TOP+.01);if(!p){previewRoot.visible=false;return}previewRoot.position.copy(p);previewMaterial.color.set(['room','ground'].includes(pending)||picked||['wall','flat','gable','chimney','door'].includes(pending)?'#85c578':'#de8070');if(pending==='room'){const r=model.snapRoom({id:'preview',x:p.x,z:p.z,width:6,depth:6,level:model.view==='2'?2:1});previewRoot.position.x=r.x;previewRoot.position.z=r.z;previewMaterial.color.set(model.canPlaceRoom(r)?'#85c578':'#de8070')}else if(pending==='ground'){const r={x:snap(p.x),z:snap(p.z),width:6,depth:6};previewRoot.position.x=r.x;previewRoot.position.z=r.z;previewMaterial.color.set(model.validGround(r)?'#85c578':'#de8070')}}
   function upperPoint(event){const p=point(event,1.02+model.state.height+.2);if(!p)return null;const draft=model.upperDraft(p);return point(event,model.height(draft))}
   function place(tool,event){
     const picked=hit(event),id=picked?.object.userData.buildId,type=picked?.object.userData.buildType;let result=false;
@@ -78,17 +81,17 @@ export function createBuildingControls({scene,camera,renderer,controls,system,oc
     else if(tool==='door'){const w=model.wall(id);if(w){const g=model.getModel(id),p=g.worldToLocal(picked.point.clone());result=model.addDoor(w.id,p.x)}}
     else if(tool==='flat'||tool==='gable'){const r=model.room(id)||model.room(model.wall(id)?.rooms[0])||model.room(id?.replace(/-roof$/,''));if(r&&model.setRoof(r.id,tool))result=r.id+'-roof'}
     else if(tool==='chimney'){const r=type==='roof'?model.room(id.replace(/-roof$/,'')):null;if(r)result=model.addDecoration(r.id,(picked.point.x-r.x)/r.width*2,(picked.point.z-r.z)/r.depth*2)}
-    if(!result&&['flat','gable','chimney','door'].includes(tool)){const p=point(event,GROUND_TOP+.01);if(p){const r=system.add('loose-'+tool,p);if(r){pending=null;previewRoot.visible=false;onLooseSelect(r.id);return true}}}
-    if(result){pending=null;previewRoot.visible=false;select(result,true);return true}message();return false;
+    if(!result&&['flat','gable','chimney','door'].includes(tool)){const p=point(event,GROUND_TOP+.01);if(p){const r=system.add('loose-'+tool,p);if(r){pending=null;endCarry();previewRoot.visible=false;onLooseSelect(r.id);return true}}}
+    if(result){pending=null;endCarry();previewRoot.visible=false;select(result,true);return true}message();return false;
   }
   function bindCard(card,record){
     card.addEventListener('pointerdown',e=>{if(e.button!==0||e.isPrimary===false)return;library={pointerId:e.pointerId,x:e.clientX,y:e.clientY,card,tool:record.tool,scroll:card.parentElement?.scrollLeft||0,moved:false,scrolling:false};suppress=false;card.setPointerCapture(e.pointerId)});
-    card.addEventListener('click',()=>{if(suppress){suppress=false;return}startTool(record.tool)});
+    card.addEventListener('click',event=>{if(suppress){suppress=false;return}startTool(record.tool);pendingControls=controls.enabled;controls.enabled=false;carry.start(card,event)});
     card.addEventListener('dragstart',e=>e.preventDefault());
     card.addEventListener('lostpointercapture',()=>{if(library?.card===card){const state=library;library=null;if(state.moved&&!state.scrolling)close(false)}});
   }
-  function libraryMove(event){if(!library||event.pointerId!==library.pointerId)return;const dx=event.clientX-library.x,dy=event.clientY-library.y;if(!library.moved&&Math.hypot(dx,dy)<8)return;event.preventDefault();event.stopImmediatePropagation();if(!library.moved){library.moved=true;const rect=canvas.getBoundingClientRect();library.scrolling=event.clientY>=rect.top+rect.height&&Math.abs(dx)>Math.abs(dy)*1.3;if(!library.scrolling){const state=library;startTool(state.tool);library=state}}if(library.scrolling){if(library.card.parentElement)library.card.parentElement.scrollLeft=library.scroll-dx;return}preview(event)}
-  window.addEventListener('pointermove',libraryMove,{capture:true});
+  function libraryMove(event){if(!library||event.pointerId!==library.pointerId)return;const dx=event.clientX-library.x,dy=event.clientY-library.y;if(!library.moved&&Math.hypot(dx,dy)<8)return;event.preventDefault();event.stopImmediatePropagation();if(!library.moved){library.moved=true;const rect=canvas.getBoundingClientRect();library.scrolling=event.clientY>=rect.top+rect.height&&Math.abs(dx)>Math.abs(dy)*1.3;if(!library.scrolling){const state=library;startTool(state.tool);pendingControls=controls.enabled;controls.enabled=false;carry.start(state.card,event);library=state}}if(library.scrolling){if(library.card.parentElement)library.card.parentElement.scrollLeft=library.scroll-dx;return}preview(event)}
+  window.addEventListener('pointermove',event=>{if(pending&&!library)preview(event);else libraryMove(event)},{capture:true});
   window.addEventListener('pointerup',e=>{if(!library||e.pointerId!==library.pointerId)return;const state=library;library=null;if(state.card.hasPointerCapture(e.pointerId))state.card.releasePointerCapture(e.pointerId);if(!state.moved)return;suppress=true;e.preventDefault();e.stopImmediatePropagation();if(state.scrolling)return;const b=canvas.getBoundingClientRect();if(e.clientY>=b.top&&e.clientY<b.top+b.height&&e.clientX>=b.left&&e.clientX<b.left+b.width){if(!place(state.tool,e))close(false)}else close(false)},{capture:true});
   canvas.addEventListener('pointerdown',e=>{
     if(deleteId){e.preventDefault();e.stopImmediatePropagation();return}
@@ -125,14 +128,14 @@ export function createBuildingControls({scene,camera,renderer,controls,system,oc
   canvas.addEventListener('pointerup',e=>{
     if(drag?.pointerId===e.pointerId){e.preventDefault();e.stopImmediatePropagation();stopDrag();return}
     if(!enabled||!press||press.pointerId!==e.pointerId)return;const before=press;press=null;
-    if(before.pending){e.preventDefault();e.stopImmediatePropagation();if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);if(!before.moved)place(pending,e);return}
+    if(before.pending){e.preventDefault();e.stopImmediatePropagation();if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);place(pending,e);return}
     // This press reached OrbitControls, so its release must reach it too.
     // Only suppress the competing floor/object selection, not pointer cleanup.
     if(before.moved||e.timeStamp-before.time>400)return;const picked=hit(e);if(before.id&&picked?.object.userData.buildId===before.id){e.preventDefault();e.buildingHandled=true;select(before.id)}else if(!before.id&&selected)close();
   },{capture:true});
   canvas.addEventListener('lostpointercapture',()=>stopDrag(true));
   function cancelPointer(){press=null;stopDrag(true);if(library){const state=library;library=null;suppress=true;if(state.moved&&!state.scrolling)close(false)}}
-  window.addEventListener('pointercancel',cancelPointer,{capture:true});window.addEventListener('blur',cancelPointer);
+  window.addEventListener('pointercancel',cancelPointer,{capture:true});window.addEventListener('blur',()=>{cancelPointer();if(pending)close(false)});
   window.addEventListener('keydown',e=>{if(!(pending||selected))return;if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();close(!!deleteId)}else if((e.ctrlKey||e.metaKey)&&['z','y'].includes(e.key.toLowerCase())){e.preventDefault();e.stopImmediatePropagation();close(false);if(e.key.toLowerCase()==='y'||e.shiftKey)system.redo();else system.undo()}},{capture:true});
   $('build-confirm').addEventListener('click',()=>close());$('build-cancel').addEventListener('click',()=>close(false));
   $('build-remove').addEventListener('click',()=>{

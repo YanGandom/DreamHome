@@ -1,4 +1,5 @@
 import * as THREE from './vendor/three.module.js';
+import {createLibraryCarry} from './library-carry.js';
 import {SCATTER_RADIUS} from './scatter-system.js';
 
 export function createScatterControls({scene,camera,renderer,controls,system,list,onStart,onFinish,toast}){
@@ -6,6 +7,7 @@ export function createScatterControls({scene,camera,renderer,controls,system,lis
   const ring=new THREE.Mesh(new THREE.RingGeometry(SCATTER_RADIUS-.035,SCATTER_RADIUS,48),new THREE.MeshBasicMaterial({color:'#7bac63',transparent:true,opacity:.8,depthWrite:false,side:THREE.DoubleSide}));
   ring.name='ScatterBrush';ring.rotation.x=-Math.PI/2;ring.visible=false;scene.add(ring);
   let drag=null,suppressClick=false;
+  const carry=createLibraryCarry();
   function hide(){ring.visible=false;meter.hidden=true}
   function locate(){
     const rect=renderer.domElement.getBoundingClientRect(),{clientX:x,clientY:y}=drag.event;
@@ -22,28 +24,32 @@ export function createScatterControls({scene,camera,renderer,controls,system,lis
     const rect=renderer.domElement.getBoundingClientRect();meter.style.left=Math.min(rect.left+rect.width-66,Math.max(rect.left+6,drag.event.clientX-28))+'px';meter.style.top=Math.max(rect.top+8,drag.event.clientY-66)+'px';
   }
   function move(event){
-    if(!drag||event.pointerId!==drag.pointerId)return;
+    if(!drag||!drag.armed&&event.pointerId!==drag.pointerId)return;
     drag.event=event;
+    if(drag.armed){carry.move(event);return}
     if(!drag.moved&&Math.hypot(event.clientX-drag.x,event.clientY-drag.y)<7)return;
     const rect=renderer.domElement.getBoundingClientRect(),inStage=event.clientY<rect.top+rect.height;
     if(drag.scrolling||!drag.moved&&!inStage&&Math.abs(event.clientX-drag.x)>Math.abs(event.clientY-drag.y)*1.3){drag.moved=true;drag.scrolling=true;list.scrollLeft=drag.scrollLeft-(event.clientX-drag.x);return}
-    event.preventDefault();event.stopImmediatePropagation();
+    event.preventDefault();event.stopImmediatePropagation();carry.start(drag.card,event);
     if(!drag.painting){drag.moved=true;drag.painting=true;onStart();scene.updateMatrixWorld(true);scatter.refresh();system.beginGesture();scatter.beginStroke();controls.enabled=false;document.body.classList.add('scatter-painting');drag.last=performance.now()-60;sample(performance.now())}
     else if(!locate()){drag.previous=null;hide()}
   }
   function finish(commit){
-    if(!drag)return;const state=drag;drag=null;suppressClick=state.moved;
+    if(!drag)return;const state=drag;drag=null;suppressClick=state.moved&&!state.clickPickup;carry.hide();
     hide();document.body.classList.remove('scatter-painting');
+    if(state.clickPickup&&!state.painting)controls.enabled=state.controlsEnabled;
     if(state.painting){scatter.endStroke();controls.enabled=state.controlsEnabled;if(commit)system.commitGesture();else system.cancelGesture();if(commit&&scatter.full)toast('这片庭院已经铺满了道具')}
-    if(list.hasPointerCapture(state.pointerId))list.releasePointerCapture(state.pointerId);
-    onFinish();
+    if(state.pointerId!==null&&state.card?.hasPointerCapture(state.pointerId))state.card.releasePointerCapture(state.pointerId);
+    if(state.pointerId!==null&&list.hasPointerCapture(state.pointerId))list.releasePointerCapture(state.pointerId);
+    if(state.painting||state.clickPickup)onFinish();
   }
   function bindCard(card,record){
-    card.addEventListener('pointerdown',event=>{if(event.button!==0||event.isPrimary===false||drag)return;suppressClick=false;drag={type:record.scatterType,name:record.name,pointerId:event.pointerId,x:event.clientX,y:event.clientY,event,moved:false,painting:false,scrolling:false,scrollLeft:list.scrollLeft||0,previous:null,controlsEnabled:controls.enabled};list.setPointerCapture(event.pointerId)});
+    card.addEventListener('pointerdown',event=>{if(event.button!==0||event.isPrimary===false||drag)return;suppressClick=false;drag={card,type:record.scatterType,name:record.name,pointerId:event.pointerId,x:event.clientX,y:event.clientY,event,moved:false,painting:false,scrolling:false,scrollLeft:list.scrollLeft||0,previous:null,controlsEnabled:controls.enabled};card.setPointerCapture(event.pointerId)});
     card.addEventListener('dragstart',event=>event.preventDefault());
-    card.addEventListener('click',()=>{if(suppressClick){suppressClick=false;return}toast('将'+record.name+'拖到室外地面，按住撒落；停留越久越厚，最多三层')});
+    card.addEventListener('click',event=>{if(suppressClick){suppressClick=false;return}finish(false);onStart();drag={card,type:record.scatterType,name:record.name,pointerId:null,armed:true,clickPickup:true,x:0,y:0,event,moved:true,painting:false,scrolling:false,previous:null,controlsEnabled:controls.enabled};controls.enabled=false;carry.start(card,event)});
   }
   window.addEventListener('pointermove',move,{capture:true});
+  window.addEventListener('pointerdown',event=>{if(!drag?.armed||event.button!==0||event.isPrimary===false)return;drag.event=event;if(!locate()){finish(false);return}drag.armed=false;drag.pointerId=event.pointerId;event.preventDefault();event.stopImmediatePropagation();list.setPointerCapture(event.pointerId);move(event)},{capture:true});
   window.addEventListener('pointerup',event=>{if(event.pointerId!==drag?.pointerId)return;if(drag.painting){event.preventDefault();event.stopImmediatePropagation();drag.event=event;sample(performance.now())}finish(true)},{capture:true});
   window.addEventListener('pointercancel',event=>{if(event.pointerId===drag?.pointerId)finish(false)},{capture:true});
   list.addEventListener('lostpointercapture',()=>finish(false));
