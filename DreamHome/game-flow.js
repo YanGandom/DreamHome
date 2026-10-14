@@ -27,7 +27,7 @@ export function startGame(app,{doc=document,storage=localStorageOrFallback(),req
   const levelConfig=createLevelConfig(storage),invalidated=new Set();let activeLevel=levelConfig.get(1);
   for(const level of levelConfig.all())if(level.names)registerTranslations(level.names.zh,[level.names.en||level.names.zh,level.names.es||level.names.zh,level.names.fr||level.names.zh]);
   const progression=installProgression(app,{doc,storage,choose,levelConfig});
-  const levelKey=level=>'dreamhome-level-'+level.id+'-v1'+(level.configured||level.sceneConfigured?'-'+level.revision:'');
+  const levelKey=level=>'dreamhome-level-'+level.id+'-v1'+(level.revision?'-'+level.revision:'');
   const layoutKey=()=>mode==='level'?levelKey(activeLevel):MODE_KEYS.custom;
   const chrome=['achievement-toggle','editor-panel','library-collapse-toggle','camera-view-toggle','task-toggle','scene-menu-toggle','undo-edit','redo-edit','edit-mode'];
   function setChrome(enabled){for(const id of chrome)$(id).inert=!enabled;editor.setEditing(enabled);controls.enabled=enabled;body.classList.toggle('tool-rail-ready',enabled)}

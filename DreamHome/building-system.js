@@ -59,7 +59,9 @@ export function createBuildingSystem({scene,parent,system,floorSystem,defaultRoo
   })}
   function validateRoom(r,previous=null){
     const balcony=r.level===2;
-    if(system.levelRule&&(r.width>system.levelRule.width||r.depth>system.levelRule.depth))return fail('本关地基最大 '+system.levelRule.width+' × '+system.levelRule.depth+' 米');
+    const locked=system.levelRule?.lockedFoundation;
+    if(locked&&r.id===locked.id&&['x','z','width','depth'].some(key=>Math.abs(r[key]-locked[key])>.001))return fail('本关地基固定为 10 × 10 米，不能移动或调整尺寸');
+    if(system.levelRule&&!system.levelRule.freeResize&&(r.width>system.levelRule.width||r.depth>system.levelRule.depth))return fail('本关地基最大 '+system.levelRule.width+' × '+system.levelRule.depth+' 米');
     if(![r.x,r.z,r.width,r.depth].every(Number.isFinite)||r.width<(balcony?1:3)||r.width>20||r.depth<(balcony?1:3)||r.depth>20)return fail('地基长宽最大为 20 × 20 米');
     if(Math.abs(r.x)>65||Math.abs(r.z)>65)return fail('请在建筑附近添加房间');
     const b=boxOf(r);if(r.level===1&&fixedAreas.some(a=>overlap(b,boxOf(a))))return fail('地基不能与现有建筑重叠');

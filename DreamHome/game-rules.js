@@ -14,7 +14,7 @@ export function customLayout(baseline){
 }
 export function levelTasks(baseline,current){
   const before=new Map(baseline.items.map(i=>[i.id,i])),oldRooms=new Map((baseline.building?.rooms||[]).map(r=>[r.id,r])),oldPaving=new Map((baseline.building?.pavings||[]).map(r=>[r.id,r]));
-  const floor=(current.building?.rooms||[]).some(r=>r.floorStyle?.startsWith('tile-')&&oldRooms.has(r.id)&&oldRooms.get(r.id).floorStyle!==r.floorStyle)||(current.building?.pavings||[]).some(p=>p.family==='tiles'&&oldPaving.has(p.id)&&oldPaving.get(p.id).style!==p.style);
+  const floor=(current.building?.rooms||[]).some(r=>/^(tile|wood)-/.test(r.floorStyle||'')&&oldRooms.has(r.id)&&oldRooms.get(r.id).floorStyle!==r.floorStyle)||(current.building?.pavings||[]).some(p=>p.family==='tiles'&&oldPaving.has(p.id)&&oldPaving.get(p.id).style!==p.style);
   const sofa=current.items.some(i=>i.visible!==false&&!before.has(i.id)&&['salon-sofa','hearth-sofa'].includes(i.sourceId)&&Math.abs(Math.sin(i.rotation/2))>.01);
   const window=current.items.some(i=>i.visible===false&&before.get(i.id)?.visible!==false&&before.has(i.id)&&i.sourceId.startsWith('window-'));
   return [floor,sofa,window];
