@@ -94,4 +94,15 @@ body.game-intro .game-tool-rail{display:none}
 #scene-edit-bar{position:fixed;top:78px;left:50%;transform:translateX(-50%);z-index:15;max-width:calc(100vw - 130px);padding:10px 14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;border-radius:18px;background:#f2f7eef0;box-shadow:0 5px 22px #23362d22;font-size:12px}#scene-edit-bar[hidden]{display:none}#scene-edit-bar button{border:0;border-radius:12px;padding:9px;background:#39835b;color:white}#scene-edit-status{flex-basis:100%}
 #settings-scene,#scene-config-panel button,#reset-all-panel button{border:1px solid #b6cbbb;border-radius:14px;padding:12px 18px;min-height:44px;background:#e4eee5;color:#27553d;font:inherit;cursor:pointer;margin:5px 5px 5px 0}
 #settings-scene{width:100%}#scene-config-start,#reset-all-confirm{background:#39835b!important;color:white!important}#reset-all-error{color:#a33c36}
+.completion-sheet{max-width:440px;text-align:center;background:#fffaf0f2;border:1px solid #fff}
+#task-tip{position:fixed;top:max(78px,calc(env(safe-area-inset-top) + 64px));left:50%;transform:translateX(-50%);z-index:190;display:flex;align-items:center;gap:10px;width:max-content;max-width:calc(100vw - 32px);box-sizing:border-box;padding:12px 18px;border:1px solid #ffffffcc;border-radius:18px;background:#f2f8edf5;box-shadow:0 8px 28px #244b3026;color:#315d3e;font-size:14px;line-height:1.5;pointer-events:none;animation:task-tip-in .25s ease-out}
+.task-tip-check{display:grid;place-items:center;flex:0 0 26px;height:26px;border-radius:50%;background:#39835b;color:white;font-size:18px}
+#task-tip-text{min-width:0;overflow-wrap:anywhere}
+@keyframes task-tip-in{from{opacity:0;translate:0 -8px}to{opacity:1;translate:0 0}}
+.completion-sheet h2{margin-bottom:24px}.completion-actions{display:flex;gap:12px}.completion-actions button{flex:1;min-height:48px}
+.completion-actions #completion-next{background:#39835b;color:#fff}
+#next-level{display:block;width:100%;margin-top:16px;background:#39835b;color:#fff}
+#level-confetti{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:170}
+#level-confetti i{position:absolute;left:0;top:0;will-change:transform,opacity;backface-visibility:hidden}
+@media(prefers-reduced-motion:reduce){#level-confetti{display:none}}
 @media(max-width:600px){#scene-edit-bar{top:74px;width:calc(100vw - 150px);max-width:300px;padding:8px;gap:6px}#scene-edit-bar button{min-height:44px;flex:1}#scene-edit-label{flex-basis:100%}}

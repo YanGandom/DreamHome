@@ -124,13 +124,22 @@
       const files=['vendor/three.module.js','vendor/OrbitControls.js','vendor/RoundedBoxGeometry.js','vendor/BufferGeometryUtils.js','scene.js','golden-dog.js','pigeons.js','game-rules.js','game-flow.js','progression.js','progression-ui.js','levels.js','level-config.js','level-presets.js','settings.js','game-audio.js','i18n.js','locale-data.js','furniture-system.js','editor.js','object-controls.js','scene-picking.js','ground-selection.js','placement.js','architecture-system.js','wall-mounting.js','wall-stacking.js','floor-system.js','floor-controls.js','model-thumbnails.js','railing-system.js','wall-handles.js','wall-details.js','library-carry.js','foundation-system.js','outdoor-plots.js','building-system.js','building-controls.js','scene-menu.js','scatter-system.js','scatter-controls.js'];
       await Promise.all(files.map(checkFile));
       message.textContent='依赖已就绪，正在创建 3D 场景…';
-        await import('./scene.js?v=20261013-level1-preview-1');
+        await import('./scene.js?v=20261014-celebration-2');
         const {startGame}=await import('./game-flow.js');startGame(window.__winterScene);
+        const app=window.__winterScene;
+        // Keep initial layout replacement, viewport resize and shader warm-up behind the loader.
+        if(app.renderer.compileAsync)await app.renderer.compileAsync(app.scene,app.camera);
+        app.renderer.render(app.scene,app.camera);
+        await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+        loading.classList.add('done');
     }catch(error){fail(error)}
   </script>
 <section id="reset-confirm" class="reset-confirm" role="alertdialog" aria-modal="true" aria-labelledby="reset-question" hidden><p id="reset-question">是否重置当前场景？布置将恢复初始状态。</p><div><button id="reset-no" type="button">否</button><button id="reset-yes" type="button">是</button></div></section>
 <section id="reset-all-panel" class="progress-overlay" role="dialog" aria-modal="true" aria-labelledby="reset-all-title" hidden><div class="progress-sheet"><h2 id="reset-all-title">重新开始游戏</h2><p>将清空所有关卡进度、关卡存档和奖励解锁，保留自定义布置、关卡设计和设置。</p><p id="reset-all-error" role="status"></p><button id="reset-all-cancel" type="button">取消</button><button id="reset-all-confirm" type="button">确认重置</button></div></section>
 <section id="scene-config-panel" class="progress-overlay" role="dialog" aria-modal="true" aria-labelledby="scene-config-title" hidden><div class="progress-sheet"><h2 id="scene-config-title">编辑关卡场景</h2><label class="settings-row"><span>关卡</span><select id="scene-level"></select></label><p>编辑当前关卡时保留当前布置，其他关卡从初始场景开始。</p><button id="scene-config-start" type="button">开始编辑</button><button id="scene-config-export" type="button">导出场景配置</button><button id="scene-config-close" type="button">关闭</button></div></section>
 <div id="scene-edit-bar" hidden><span id="scene-edit-label">编辑关卡场景</span><button id="scene-edit-save" type="button">保存关卡场景</button><button id="scene-edit-exit" type="button">返回首页</button><span id="scene-edit-status" role="status"></span></div>
+<div id="level-confetti" aria-hidden="true"></div>
+<div id="task-tip" role="status" aria-live="polite" aria-atomic="true" hidden><span class="task-tip-check" aria-hidden="true">✓</span><span id="task-tip-text"></span></div>
+<section id="level-complete" class="progress-overlay" role="dialog" aria-modal="true" aria-labelledby="completion-title" hidden><div class="progress-sheet completion-sheet"><h2 id="completion-title">奖励获得</h2><div id="completion-rewards" class="brief-rewards"></div><p id="completion-last" hidden>全部关卡已完成！</p><div class="completion-actions"><button id="completion-home" type="button">返回首页</button><button id="completion-next" type="button">进入下一关</button></div></div></section>
 </body>
 </html>
